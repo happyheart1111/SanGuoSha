@@ -37,6 +37,19 @@ const CARD_DEFS = [
     desc: '【杀】被【闪】抵消时弃2牌仍可造成伤害' },
   { id: 'fangtian', name: '方天画戟', icon: '🔱', type: 'weapon', category: 'equip', range: 4, pack: '界限突破',
     desc: '最后一张手牌【杀】可额外选择至多2个目标' },
+  // +1坐骑（防御马）
+  { id: 'dilu', name: '的卢', icon: '🐴', type: 'plusHorse', category: 'equip', pack: '标准',
+    desc: '其他角色计算与你的距离+1' },
+  { id: 'jueying', name: '绝影', icon: '🐴', type: 'plusHorse', category: 'equip', pack: '标准',
+    desc: '其他角色计算与你的距离+1' },
+  // -1坐骑（进攻马）
+  { id: 'chitu', name: '赤兔', icon: '🐎', type: 'minusHorse', category: 'equip', pack: '标准',
+    desc: '你计算与其他角色的距离-1' },
+  { id: 'dawan', name: '大宛', icon: '🐎', type: 'minusHorse', category: 'equip', pack: '标准',
+    desc: '你计算与其他角色的距离-1' },
+  // 防具
+  { id: 'baguazhen', name: '八卦阵', icon: '☯️', type: 'armor', category: 'equip', pack: '标准',
+    desc: '当你需要使用【闪】时，可判定：若为红色，视为你打出了一张【闪】' },
 ];
 
 const DECK_COMPOSITION = [
@@ -59,4 +72,9 @@ const DECK_COMPOSITION = [
   { cardId: 'qinggang', count: 1 },
   { cardId: 'guanshi', count: 1 },
   { cardId: 'fangtian', count: 1 },
+  { cardId: 'dilu', count: 1 },
+  { cardId: 'jueying', count: 1 },
+  { cardId: 'chitu', count: 1 },
+  { cardId: 'dawan', count: 1 },
+  { cardId: 'baguazhen', count: 2 },
 ];
