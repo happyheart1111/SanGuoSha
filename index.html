@@ -1,0 +1,1570 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>三国杀 - 主公争霸</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: "Microsoft YaHei", "微软雅黑", sans-serif;
+  background: linear-gradient(135deg, #1a0a0a 0%, #2d1313 30%, #1a0a0a 60%, #0d1a0d 100%);
+  min-height: 100vh; color: #e8d5a3; overflow-x: hidden;
+}
+.game-container { max-width: 1100px; margin: 0 auto; padding: 10px; }
+
+/* 顶部信息栏 */
+.top-bar {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 20px; background: rgba(0,0,0,0.5);
+  border-bottom: 2px solid #8b6914; border-radius: 0 0 12px 12px;
+  margin-bottom: 10px;
+}
+.top-bar h1 { font-size: 22px; color: #f0d060; text-shadow: 0 0 10px rgba(240,208,96,0.5); letter-spacing: 4px; }
+.game-info { font-size: 13px; color: #c0a060; }
+.deck-info { display: flex; align-items: center; gap: 10px; }
+.deck-visual {
+  width: 50px; height: 70px; background: linear-gradient(135deg, #1a3a5c, #2a5a8c);
+  border: 2px solid #8b6914; border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; color: #f0d060; position: relative; box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+}
+.deck-count { font-size: 14px; font-weight: bold; color: #f0d060; }
+
+/* 游戏主体区域 */
+.game-board { display: flex; flex-direction: column; gap: 15px; }
+
+/* 对手区域 */
+.opponents-area { display: flex; justify-content: center; gap: 40px; flex-wrap: wrap; }
+
+/* 玩家区域 */
+.player-area { margin-top: auto; }
+
+/* 角色面板 */
+.hero-panel {
+  background: linear-gradient(180deg, rgba(20,10,5,0.9), rgba(40,20,10,0.95));
+  border: 2px solid #6b4010; border-radius: 16px; padding: 15px;
+  width: 260px; position: relative; box-shadow: 0 4px 20px rgba(0,0,0,0.6);
+  transition: all 0.3s;
+}
+.hero-panel.active-turn { border-color: #f0d060; box-shadow: 0 0 30px rgba(240,208,96,0.4); animation: glow 1.5s ease-in-out infinite; }
+.hero-panel.dead { opacity: 0.5; filter: grayscale(0.7); }
+@keyframes glow {
+  0%, 100% { box-shadow: 0 0 20px rgba(240,208,96,0.3); }
+  50% { box-shadow: 0 0 40px rgba(240,208,96,0.6); }
+}
+.hero-panel.current-player-panel { border-color: #f0d060; box-shadow: 0 0 25px rgba(240,208,96,0.3); }
+
+.hero-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.hero-avatar {
+  width: 70px; height: 70px; border-radius: 50%; border: 3px solid #8b6914;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 32px; font-weight: bold; position: relative; overflow: hidden;
+}
+.hero-avatar.liubei { background: linear-gradient(135deg, #2a1a0a, #6b3010); color: #f0a020; }
+.hero-avatar.sunquan { background: linear-gradient(135deg, #0a2a1a, #107030); color: #20f070; }
+.hero-avatar.caocao { background: linear-gradient(135deg, #0a0a2a, #10306b); color: #2060f0; }
+.hero-name { font-size: 22px; font-weight: bold; }
+.hero-title { font-size: 12px; color: #a08050; }
+
+.hp-bar { margin: 8px 0; }
+.hp-dots { display: flex; gap: 4px; flex-wrap: wrap; }
+.hp-dot {
+  width: 18px; height: 18px; border-radius: 50%;
+  border: 2px solid #8b2020; background: #c03030;
+  transition: all 0.3s; box-shadow: 0 0 6px rgba(192,48,48,0.5);
+}
+.hp-dot.lost { background: #3a1010; border-color: #4a1010; box-shadow: none; }
+.hp-dot.damaging { animation: hpShake 0.5s; }
+@keyframes hpShake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-3px); }
+  75% { transform: translateX(3px); }
+}
+
+.skills { font-size: 11px; color: #a08050; margin: 5px 0; display: flex; gap: 8px; flex-wrap: wrap; }
+.skill-badge {
+  background: rgba(139,105,20,0.3); border: 1px solid #8b6914;
+  border-radius: 4px; padding: 2px 6px; cursor: help;
+}
+.skill-badge:hover { background: rgba(139,105,20,0.5); }
+.hand-count { font-size: 12px; color: #a08050; margin-top: 5px; }
+
+.equipment-area { display: flex; gap: 6px; margin-top: 5px; min-height: 24px; }
+.equip-slot {
+  width: 40px; height: 28px; border: 1px dashed #4a3010; border-radius: 4px;
+  display: flex; align-items: center; justify-content: center; font-size: 10px;
+  color: #604020;
+}
+.equip-slot.filled { border-color: #8b6914; background: rgba(139,105,20,0.2); color: #f0d060; }
+
+/* 手牌展示区 */
+.hand-display {
+  margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px;
+  min-height: 40px; padding: 8px;
+  background: rgba(0,0,0,0.3); border-radius: 8px;
+}
+.hand-display .mini-card {
+  width: 45px; height: 63px; border-radius: 5px; font-size: 10px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  cursor: default; position: relative; text-align: center;
+  border: 1px solid #555; transition: transform 0.2s;
+}
+.mini-card:hover { transform: translateY(-5px); }
+.mini-card.sha { background: linear-gradient(135deg, #3a1010, #6b2020); color: #ff6060; border-color: #8b2020; }
+.mini-card.shan { background: linear-gradient(135deg, #103a10, #206b20); color: #60ff60; border-color: #208b20; }
+.mini-card.tao { background: linear-gradient(135deg, #3a1010, #8b2020); color: #ff8080; border-color: #c03030; }
+.mini-card.juedou { background: linear-gradient(135deg, #2a1a0a, #5a3a1a); color: #ffa040; border-color: #8b5010; }
+.mini-card.other { background: linear-gradient(135deg, #1a2a3a, #2a4a6a); color: #80c0ff; border-color: #306090; }
+.mini-card.face-down {
+  background: linear-gradient(135deg, #1a3a5c, #2a5a8c);
+  color: transparent; border-color: #306090;
+}
+
+/* 手牌操作区（玩家自己的手牌） */
+.hand-cards-area { margin-top: 10px; }
+.hand-label { font-size: 13px; color: #c0a060; margin-bottom: 8px; display: flex; justify-content: space-between; }
+.hand-cards {
+  display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;
+  min-height: 120px; padding: 15px; background: rgba(0,0,0,0.4); border-radius: 12px;
+}
+.card {
+  width: 80px; height: 112px; border-radius: 8px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  cursor: pointer; position: relative; transition: all 0.2s;
+  border: 2px solid #555; user-select: none;
+  text-align: center; font-weight: bold;
+  box-shadow: 0 3px 10px rgba(0,0,0,0.4);
+}
+.card:hover:not(.disabled) { transform: translateY(-10px); box-shadow: 0 8px 25px rgba(0,0,0,0.6); }
+.card.selected { transform: translateY(-15px); border-color: #f0d060 !important; box-shadow: 0 0 20px rgba(240,208,96,0.6); }
+.card.disabled { opacity: 0.6; cursor: not-allowed; }
+.card-name { font-size: 14px; margin-bottom: 4px; }
+.card-suit { font-size: 10px; opacity: 0.7; }
+.card-icon { font-size: 24px; margin: 4px 0; }
+
+/* 按钮区 */
+.action-bar {
+  display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;
+  padding: 10px; margin-top: 10px;
+}
+.btn {
+  padding: 10px 24px; border: 2px solid #8b6914; border-radius: 8px;
+  background: linear-gradient(180deg, #3a2010, #2a1505);
+  color: #f0d060; cursor: pointer; font-size: 15px; font-weight: bold;
+  transition: all 0.2s; font-family: inherit; letter-spacing: 2px;
+}
+.btn:hover:not(:disabled) { background: linear-gradient(180deg, #5a3520, #3a2010); border-color: #f0d060; box-shadow: 0 0 15px rgba(240,208,96,0.3); }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn.danger { border-color: #c03030; color: #ff6060; }
+.btn.danger:hover:not(:disabled) { background: linear-gradient(180deg, #5a1010, #3a0505); box-shadow: 0 0 15px rgba(255,96,96,0.3); }
+.btn.skill-btn { border-color: #b09030; color: #ffe080; background: linear-gradient(180deg, #4a3010, #2a1805); }
+
+/* 选择目标提示 */
+.target-select-overlay {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.6); display: none;
+  align-items: center; justify-content: center; z-index: 100;
+}
+.target-select-overlay.show { display: flex; }
+.target-hint { color: #f0d060; font-size: 18px; margin-bottom: 20px; text-align: center; }
+.target-buttons { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; }
+.target-btn {
+  padding: 15px 30px; border: 2px solid #8b6914; border-radius: 12px;
+  background: rgba(30,15,5,0.9); color: #f0d060; cursor: pointer;
+  font-size: 16px; font-weight: bold; transition: all 0.2s; font-family: inherit;
+}
+.target-btn:hover { border-color: #f0d060; box-shadow: 0 0 20px rgba(240,208,96,0.4); transform: scale(1.05); }
+
+/* 日志 */
+.log-area {
+  margin-top: 15px; max-height: 150px; overflow-y: auto;
+  background: rgba(0,0,0,0.5); border: 1px solid #4a3010; border-radius: 8px;
+  padding: 10px; font-size: 12px; color: #a08050;
+}
+.log-entry { padding: 2px 0; border-bottom: 1px solid rgba(74,48,16,0.3); }
+.log-entry.important { color: #f0d060; }
+.log-entry.damage { color: #ff6060; }
+.log-entry.heal { color: #60ff60; }
+
+/* 弹窗 */
+.modal {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.8); display: flex; align-items: center;
+  justify-content: center; z-index: 200;
+}
+.modal-content {
+  background: linear-gradient(180deg, #2a1510, #1a0a05);
+  border: 3px solid #8b6914; border-radius: 16px;
+  padding: 30px; text-align: center; max-width: 400px;
+}
+.modal-content h2 { color: #f0d060; margin-bottom: 15px; font-size: 24px; }
+.modal-content p { color: #c0a060; margin-bottom: 20px; }
+
+/* 响应式 */
+@media (max-width: 700px) {
+  .opponents-area { gap: 15px; }
+  .hero-panel { width: 150px; padding: 10px; }
+  .hero-avatar { width: 45px; height: 45px; font-size: 22px; }
+  .hero-name { font-size: 16px; }
+  .card { width: 60px; height: 84px; }
+  .card-name { font-size: 11px; }
+  .card-icon { font-size: 18px; }
+}
+</style>
+</head>
+<body>
+<div class="game-container" id="app"></div>
+<div class="target-select-overlay" id="targetOverlay">
+  <div>
+    <div class="target-hint" id="targetHint"></div>
+    <div class="target-buttons" id="targetButtons"></div>
+  </div>
+</div>
+
+<script>
+// ==================== 数据定义 ====================
+
+// 花色
+const SUITS = ['♠', '♥', '♣', '♦'];
+const SUIT_NAMES = { '♠': '黑桃', '♥': '红桃', '♣': '梅花', '♦': '方块' };
+
+// 武将数据
+const HEROES = {
+  liubei: {
+    id: 'liubei', name: '刘备', title: '乱世的枭雄',
+    avatarClass: 'liubei', maxHp: 4,
+    skills: [
+      { id: 'rende', name: '仁德', desc: '出牌阶段，你可以将任意张手牌交给一名其他角色。若你给出的牌达到两张或更多，你回复1点体力。' }
+    ]
+  },
+  sunquan: {
+    id: 'sunquan', name: '孙权', title: '年轻的贤君',
+    avatarClass: 'sunquan', maxHp: 4,
+    skills: [
+      { id: 'zhiheng', name: '制衡', desc: '出牌阶段，你可以弃置任意张牌，然后摸等量的牌。每回合限一次。' }
+    ]
+  },
+  caocao: {
+    id: 'caocao', name: '曹操', title: '乱世的奸雄',
+    avatarClass: 'caocao', maxHp: 4,
+    skills: [
+      { id: 'jianxiong', name: '奸雄', desc: '当你受到伤害后，你可以获得对你造成伤害的牌。' }
+    ]
+  }
+};
+
+// 卡牌定义
+const CARD_DEFS = [
+  { id: 'sha', name: '杀', icon: '⚔️', type: 'sha', category: 'basic' },
+  { id: 'shan', name: '闪', icon: '🛡️', type: 'shan', category: 'basic' },
+  { id: 'tao', name: '桃', icon: '🍑', type: 'tao', category: 'basic' },
+  { id: 'juedou', name: '决斗', icon: '🤺', type: 'juedou', category: 'tool' },
+  { id: 'guohe', name: '过河拆桥', icon: '🌉', type: 'guohe', category: 'tool' },
+  { id: 'shunshou', name: '顺手牵羊', icon: '🐑', type: 'shunshou', category: 'tool' },
+  { id: 'wuzhong', name: '无中生有', icon: '✨', type: 'wuzhong', category: 'tool' },
+  { id: 'nanman', name: '南蛮入侵', icon: '🐘', type: 'nanman', category: 'tool' },
+  { id: 'wanjian', name: '万箭齐发', icon: '🏹', type: 'wanjian', category: 'tool' },
+  { id: 'taoyuan', name: '桃园结义', icon: '🌸', type: 'taoyuan', category: 'tool' },
+  { id: 'wugu', name: '五谷丰登', icon: '🌾', type: 'wugu', category: 'tool' },
+];
+
+// 牌堆构成
+const DECK_COMPOSITION = [
+  { cardId: 'sha', count: 15 },
+  { cardId: 'shan', count: 8 },
+  { cardId: 'tao', count: 4 },
+  { cardId: 'juedou', count: 3 },
+  { cardId: 'guohe', count: 3 },
+  { cardId: 'shunshou', count: 3 },
+  { cardId: 'wuzhong', count: 3 },
+  { cardId: 'nanman', count: 2 },
+  { cardId: 'wanjian', count: 1 },
+  { cardId: 'taoyuan', count: 1 },
+  { cardId: 'wugu', count: 1 },
+];
+
+// ==================== 游戏引擎 ====================
+
+class Game {
+  constructor() {
+    this.players = [];
+    this.deck = [];
+    this.discardPile = [];
+    this.currentPlayerIdx = 0;
+    this.phase = 'idle'; // draw, play, discard, idle
+    this.logEntries = [];
+    this.shaUsedThisTurn = false;
+    this.zhihengUsedThisTurn = false;
+    this.selectedCardIdx = -1;
+    this.waitingForTarget = null; // { cardIdx, action }
+    this.humanPlayerId = null;
+    this.gameOver = false;
+    this.aiThinking = false;
+    this.pendingDamageCards = {}; // playerId -> card (for caocao jianxiong)
+  }
+
+  init(humanHeroId) {
+    this.humanPlayerId = humanHeroId;
+    const allHeroes = ['liubei', 'sunquan', 'caocao'];
+    this.players = allHeroes.map(id => ({
+      id: id,
+      hero: HEROES[id],
+      hp: HEROES[id].maxHp,
+      hand: [],
+      equipment: { weapon: null, armor: null, plusHorse: null, minusHorse: null },
+      isHuman: id === humanHeroId,
+      alive: true,
+    }));
+    this.initDeck();
+    this.dealInitialCards();
+    this.currentPlayerIdx = 0;
+    this.phase = 'draw';
+    this.selectedCardIdx = -1;
+    this.waitingForTarget = null;
+    this.gameOver = false;
+    this.aiThinking = false;
+    this.shaUsedThisTurn = false;
+    this.zhihengUsedThisTurn = false;
+    this.logEntries = [];
+    this.addLog('========== 游戏开始 ==========', 'important');
+    this.addLog(`你扮演【${HEROES[humanHeroId].name}】，击败所有对手即可获胜！`);
+    this.startCurrentTurn();
+  }
+
+  initDeck() {
+    this.deck = [];
+    let cardId = 0;
+    for (const comp of DECK_COMPOSITION) {
+      for (let i = 0; i < comp.count; i++) {
+        const suit = SUITS[Math.floor(Math.random() * 4)];
+        const num = Math.floor(Math.random() * 13) + 1;
+        this.deck.push({
+          id: cardId++,
+          cardDefId: comp.cardId,
+          ...CARD_DEFS.find(c => c.id === comp.cardId),
+          suit: suit,
+          number: num,
+        });
+      }
+    }
+    this.shuffle(this.deck);
+  }
+
+  shuffle(arr) {
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+  }
+
+  dealInitialCards() {
+    for (const player of this.players) {
+      for (let i = 0; i < 4; i++) this.drawCard(player);
+    }
+  }
+
+  drawCard(player, count = 1) {
+    for (let i = 0; i < count; i++) {
+      if (this.deck.length === 0) {
+        if (this.discardPile.length === 0) break;
+        this.deck = [...this.discardPile];
+        this.discardPile = [];
+        this.shuffle(this.deck);
+        this.addLog('牌堆已空，洗入弃牌堆。', 'important');
+      }
+      const card = this.deck.pop();
+      card.ownerId = player.id;
+      player.hand.push(card);
+    }
+  }
+
+  discardCard(player, card) {
+    const idx = player.hand.indexOf(card);
+    if (idx >= 0) {
+      player.hand.splice(idx, 1);
+      this.discardPile.push(card);
+    }
+  }
+
+  startCurrentTurn() {
+    const player = this.players[this.currentPlayerIdx];
+    if (!player.alive) {
+      this.nextPlayer();
+      return;
+    }
+    this.shaUsedThisTurn = false;
+    this.zhihengUsedThisTurn = false;
+    this.phase = 'draw';
+    this.addLog(`—— ${player.hero.name} 的回合开始 ——`, 'important');
+
+    if (player.isHuman) {
+      setTimeout(() => this.humanDrawPhase(), 500);
+    } else {
+      setTimeout(() => this.aiDrawPhase(player), 800);
+    }
+  }
+
+  // 摸牌阶段
+  humanDrawPhase() {
+    const player = this.players[this.currentPlayerIdx];
+    this.drawCard(player, 2);
+    this.addLog(`${player.hero.name} 摸了2张牌`);
+    this.phase = 'play';
+    this.render();
+  }
+
+  aiDrawPhase(player) {
+    this.drawCard(player, 2);
+    this.addLog(`${player.hero.name} 摸了2张牌`);
+    this.phase = 'play';
+    this.render();
+    setTimeout(() => this.aiPlayPhase(player), 1000);
+  }
+
+  // 出牌阶段 - 人类玩家
+  selectCard(idx) {
+    if (this.phase !== 'play') return;
+    const player = this.players[this.currentPlayerIdx];
+    if (!player.isHuman) return;
+    if (idx < 0 || idx >= player.hand.length) return;
+
+    if (this.selectedCardIdx === idx) {
+      this.selectedCardIdx = -1;
+    } else {
+      this.selectedCardIdx = idx;
+    }
+    this.render();
+  }
+
+  playSelectedCard() {
+    if (this.selectedCardIdx < 0) return;
+    const player = this.players[this.currentPlayerIdx];
+    const card = player.hand[this.selectedCardIdx];
+    if (!card) return;
+
+    const targets = this.getValidTargets(card);
+    if (targets.length === 0) {
+      this.addLog('没有可选目标');
+      return;
+    }
+
+    if (card.type === 'sha') {
+      if (targets.length === 1) {
+        this.useCardOnTarget(card, targets[0]);
+        this.selectedCardIdx = -1;
+      } else {
+        this.showTargetSelection(card, targets, (target) => {
+          this.useCardOnTarget(card, target);
+          this.selectedCardIdx = -1;
+        });
+      }
+    } else if (card.type === 'shan' || card.type === 'tao') {
+      // 这些牌不能在出牌阶段主动使用
+      this.addLog(`${card.name}不能在出牌阶段主动使用`);
+    } else if (card.type === 'juedou' || card.type === 'guohe' || card.type === 'shunshou') {
+      this.showTargetSelection(card, targets, (target) => {
+        this.useCardOnTarget(card, target);
+        this.selectedCardIdx = -1;
+      });
+    } else if (card.type === 'wuzhong' || card.type === 'nanman' || card.type === 'wanjian' || card.type === 'taoyuan' || card.type === 'wugu') {
+      this.useCardOnTarget(card, null);
+      this.selectedCardIdx = -1;
+    }
+  }
+
+  getValidTargets(card) {
+    const player = this.players[this.currentPlayerIdx];
+    const aliveOthers = this.players.filter(p => p.alive && p.id !== player.id);
+
+    switch (card.type) {
+      case 'sha': {
+        // 杀：距离为1的敌方角色
+        // 简化距离计算：如果没有+1马则距离为1，有+1马距离+1，有-1马则攻击距离+1
+        return aliveOthers.filter(t => this.calcDistance(player, t) <= 1);
+      }
+      case 'juedou':
+      case 'guohe':
+      case 'shunshou':
+        return aliveOthers;
+      default:
+        return [];
+    }
+  }
+
+  calcDistance(from, to) {
+    let dist = 1;
+    if (to.equipment.plusHorse) dist += 1;
+    if (from.equipment.minusHorse) dist -= 1;
+    return Math.max(1, dist);
+  }
+
+  showTargetSelection(card, targets, callback) {
+    this.waitingForTarget = { card, targets, callback };
+    this.render();
+    const overlay = document.getElementById('targetOverlay');
+    const hint = document.getElementById('targetHint');
+    const buttons = document.getElementById('targetButtons');
+    hint.textContent = `使用【${card.name}】—— 选择目标`;
+    buttons.innerHTML = targets.map(t => `
+      <button class="target-btn" onclick="window._targetSelect('${t.id}')">
+        ${t.hero.name} (${t.hp}/${t.hero.maxHp} HP)
+      </button>
+    `).join('') + `
+      <button class="target-btn" style="border-color:#666;color:#888;" onclick="window._cancelTarget()">取消</button>
+    `;
+    overlay.classList.add('show');
+    window._targetSelect = (id) => {
+      overlay.classList.remove('show');
+      const target = targets.find(t => t.id === id);
+      if (target && this.waitingForTarget) {
+        this.waitingForTarget.callback(target);
+      }
+      this.waitingForTarget = null;
+      this.render();
+    };
+    window._cancelTarget = () => {
+      overlay.classList.remove('show');
+      this.waitingForTarget = null;
+      this.selectedCardIdx = -1;
+      this.render();
+    };
+  }
+
+  useCardOnTarget(card, target) {
+    const player = this.players[this.currentPlayerIdx];
+    this.discardCard(player, card);
+    this.addLog(`${player.hero.name}使用了【${card.name}】${target ? '，目标是' + target.hero.name : ''}`);
+
+    switch (card.type) {
+      case 'sha': this.resolveSha(player, target, card); break;
+      case 'tao': this.resolveTao(player); break;
+      case 'juedou': this.resolveJuedou(player, target); break;
+      case 'guohe': this.resolveGuohe(target); break;
+      case 'shunshou': this.resolveShunshou(player, target); break;
+      case 'wuzhong': this.resolveWuzhong(player); break;
+      case 'nanman': this.resolveNanman(player); break;
+      case 'wanjian': this.resolveWanjian(player); break;
+      case 'taoyuan': this.resolveTaoyuan(player); break;
+      case 'wugu': this.resolveWugu(player); break;
+    }
+    if (!this.gameOver) this.render();
+  }
+
+  // ==================== 卡牌效果结算 ====================
+
+  resolveSha(source, target, card) {
+    if (!target.alive) return;
+    this.addLog(`${target.hero.name}需要打出【闪】来响应【杀】`);
+    this.pendingDamageCards[target.id] = card;
+
+    if (target.isHuman) {
+      this.render();
+      this.waitForShanResponse(target, source, card);
+    } else {
+      setTimeout(() => this.aiRespondToSha(target, source, card), 600);
+    }
+  }
+
+  waitForShanResponse(target, source, card) {
+    const hasShan = target.hand.some(c => c.type === 'shan');
+    this.waitingForTarget = {
+      type: 'shan_response',
+      target, source, card,
+      hasShan
+    };
+    this.render();
+    if (!hasShan) {
+      setTimeout(() => {
+        this.waitingForTarget = null;
+        this.dealDamage(target, source, 1, card);
+        this.render();
+      }, 600);
+    }
+  }
+
+  humanRespondShan(withShanCard) {
+    if (!this.waitingForTarget || this.waitingForTarget.type !== 'shan_response') return;
+    const { target, source, card } = this.waitingForTarget;
+    this.waitingForTarget = null;
+
+    if (withShanCard) {
+      this.discardCard(target, withShanCard);
+      this.addLog(`${target.hero.name}打出了【闪】，成功闪避`);
+      delete this.pendingDamageCards[target.id];
+    } else {
+      this.dealDamage(target, source, 1, card);
+    }
+    this.render();
+  }
+
+  aiRespondToSha(target, source, card) {
+    const shanCard = target.hand.find(c => c.type === 'shan');
+    if (shanCard && (target.hp <= 2 || Math.random() < 0.7)) {
+      this.discardCard(target, shanCard);
+      this.addLog(`${target.hero.name}打出了【闪】，成功闪避`);
+      delete this.pendingDamageCards[target.id];
+    } else {
+      this.addLog(`${target.hero.name}无法打出【闪】`);
+      this.dealDamage(target, source, 1, card);
+    }
+    this.render();
+  }
+
+  resolveTao(player) {
+    if (player.hp < player.hero.maxHp) {
+      player.hp++;
+      this.addLog(`${player.hero.name}回复了1点体力 (${player.hp}/${player.hero.maxHp})`, 'heal');
+    } else {
+      this.addLog(`${player.hero.name}体力已满，【桃】无法生效`);
+    }
+  }
+
+  resolveJuedou(source, target) {
+    this.addLog(`${source.hero.name}向${target.hero.name}发起决斗！`, 'important');
+    this.juedouRound(source, target);
+  }
+
+  juedouRound(challenger, defender, challengerCard = null) {
+    if (this.gameOver) return;
+
+    if (defender.isHuman) {
+      this.waitingForTarget = {
+        type: 'juedou_defend',
+        challenger, defender,
+      };
+      this.render();
+      return;
+    }
+
+    const shaCard = defender.hand.find(c => c.type === 'sha');
+    if (shaCard) {
+      this.discardCard(defender, shaCard);
+      this.addLog(`${defender.hero.name}打出【杀】响应决斗`);
+      this.juedouRound(defender, challenger, shaCard);
+    } else {
+      this.addLog(`${defender.hero.name}无法打出【杀】，受到1点伤害`);
+      this.dealDamage(defender, challenger, 1);
+      this.render();
+    }
+  }
+
+  humanRespondJuedou(withShaCard) {
+    if (!this.waitingForTarget || this.waitingForTarget.type !== 'juedou_defend') return;
+    const { challenger, defender } = this.waitingForTarget;
+    this.waitingForTarget = null;
+
+    if (withShaCard) {
+      this.discardCard(defender, withShaCard);
+      this.addLog(`${defender.hero.name}打出【杀】响应决斗`);
+      this.juedouRound(defender, challenger, withShaCard);
+    } else {
+      this.addLog(`${defender.hero.name}无法打出【杀】，受到1点伤害`);
+      this.dealDamage(defender, challenger, 1);
+    }
+    this.render();
+  }
+
+  resolveGuohe(target) {
+    if (target.hand.length > 0) {
+      if (target.isHuman) {
+        // 人类玩家选择要弃的牌
+        this.waitingForTarget = {
+          type: 'guohe_discard',
+          target,
+          source: this.players[this.currentPlayerIdx],
+        };
+      } else {
+        // AI随机弃一张
+        const card = target.hand[Math.floor(Math.random() * target.hand.length)];
+        this.discardCard(target, card);
+        this.addLog(`${target.hero.name}被迫弃置了【${card.name}】`);
+      }
+    } else {
+      this.addLog(`${target.hero.name}没有手牌可弃`);
+    }
+    this.render();
+  }
+
+  humanGuoheDiscard(cardIdx) {
+    if (!this.waitingForTarget || this.waitingForTarget.type !== 'guohe_discard') return;
+    const { target } = this.waitingForTarget;
+    this.waitingForTarget = null;
+    const card = target.hand[cardIdx];
+    this.discardCard(target, card);
+    this.addLog(`${target.hero.name}被迫弃置了【${card.name}】`);
+    this.render();
+  }
+
+  resolveShunshou(source, target) {
+    if (target.hand.length > 0) {
+      if (target.isHuman) {
+        // 人类玩家选择被顺的牌
+        this.waitingForTarget = {
+          type: 'shunshou_steal',
+          target, source,
+        };
+      } else {
+        const card = target.hand[Math.floor(Math.random() * target.hand.length)];
+        this.discardCard(target, card);
+        card.ownerId = source.id;
+        source.hand.push(card);
+        this.addLog(`${source.hero.name}顺手牵羊获得了${target.hero.name}的【${card.name}】`);
+      }
+    } else {
+      this.addLog(`${target.hero.name}没有手牌`);
+    }
+    this.render();
+  }
+
+  humanShunshouSteal(cardIdx) {
+    if (!this.waitingForTarget || this.waitingForTarget.type !== 'shunshou_steal') return;
+    const { target, source } = this.waitingForTarget;
+    this.waitingForTarget = null;
+    const card = target.hand[cardIdx];
+    this.discardCard(target, card);
+    card.ownerId = source.id;
+    source.hand.push(card);
+    this.addLog(`${source.hero.name}顺手牵羊获得了${target.hero.name}的【${card.name}】`);
+    this.render();
+  }
+
+  resolveWuzhong(player) {
+    this.drawCard(player, 2);
+    this.addLog(`${player.hero.name}使用了无中生有，摸2张牌`);
+  }
+
+  resolveNanman(source) {
+    this.addLog(`${source.hero.name}使用了【南蛮入侵】！所有人需打出【杀】`, 'important');
+    this.resolveAOE(source, 'sha', '南蛮入侵');
+  }
+
+  resolveWanjian(source) {
+    this.addLog(`${source.hero.name}使用了【万箭齐发】！所有人需打出【闪】`, 'important');
+    this.resolveAOE(source, 'shan', '万箭齐发');
+  }
+
+  resolveAOE(source, requiredType, aoeName) {
+    const targets = this.players.filter(p => p.alive && p.id !== source.id);
+    this.processAOETargets(source, targets, requiredType, 0);
+  }
+
+  processAOETargets(source, targets, requiredType, idx) {
+    if (idx >= targets.length) return;
+    const target = targets[idx];
+
+    if (target.isHuman) {
+      this.waitingForTarget = {
+        type: 'aoe_response',
+        source, target, requiredType,
+        remaining: targets.slice(idx + 1),
+        aoeIdx: idx,
+        targets,
+      };
+      const hasCard = target.hand.some(c => c.type === requiredType);
+      if (!hasCard) {
+        setTimeout(() => {
+          this.waitingForTarget = null;
+          this.addLog(`${target.hero.name}没有【${requiredType === 'sha' ? '杀' : '闪'}】，受到1点伤害`, 'damage');
+          this.dealDamage(target, source, 1);
+          this.processAOETargets(source, targets, requiredType, idx + 1);
+          this.render();
+        }, 400);
+      }
+      this.render();
+      return;
+    }
+
+    const card = target.hand.find(c => c.type === requiredType);
+    if (card && (target.hp <= 2 || Math.random() < 0.7)) {
+      this.discardCard(target, card);
+      this.addLog(`${target.hero.name}打出了【${card.name}】`);
+    } else {
+      this.addLog(`${target.hero.name}受到1点伤害`, 'damage');
+      this.dealDamage(target, source, 1);
+    }
+    this.render();
+    setTimeout(() => this.processAOETargets(source, targets, requiredType, idx + 1), 500);
+  }
+
+  humanRespondAOE(withCard) {
+    if (!this.waitingForTarget || this.waitingForTarget.type !== 'aoe_response') return;
+    const { source, target, requiredType, remaining, targets, aoeIdx } = this.waitingForTarget;
+    this.waitingForTarget = null;
+
+    if (withCard) {
+      this.discardCard(target, withCard);
+      this.addLog(`${target.hero.name}打出了【${withCard.name}】`);
+    } else {
+      this.addLog(`${target.hero.name}受到1点伤害`, 'damage');
+      this.dealDamage(target, source, 1);
+    }
+    this.render();
+    setTimeout(() => this.processAOETargets(source, targets, requiredType, aoeIdx + 1), 500);
+  }
+
+  resolveTaoyuan(player) {
+    this.addLog(`${player.hero.name}使用了【桃园结义】！`, 'important');
+    for (const p of this.players) {
+      if (p.alive && p.hp < p.hero.maxHp) {
+        p.hp++;
+        this.addLog(`${p.hero.name}回复了1点体力`, 'heal');
+      }
+    }
+  }
+
+  resolveWugu(player) {
+    this.addLog(`${player.hero.name}使用了【五谷丰登】！`, 'important');
+    const count = this.players.filter(p => p.alive).length;
+    const revealed = [];
+    for (let i = 0; i < count; i++) {
+      if (this.deck.length === 0) {
+        this.deck = [...this.discardPile];
+        this.discardPile = [];
+        this.shuffle(this.deck);
+      }
+      revealed.push(this.deck.pop());
+    }
+    // 简化：按当前顺序各拿一张
+    const alive = this.players.filter(p => p.alive);
+    for (let i = 0; i < alive.length; i++) {
+      const p = alive[i];
+      const card = revealed[i];
+      if (card) {
+        card.ownerId = p.id;
+        p.hand.push(card);
+        this.addLog(`${p.hero.name}获得了【${card.name}】`);
+      }
+    }
+  }
+
+  // ==================== 伤害结算 ====================
+
+  dealDamage(target, source, amount, card = null) {
+    for (let i = 0; i < amount; i++) {
+      if (!target.alive) return;
+      target.hp--;
+      this.addLog(`${target.hero.name}受到1点伤害 (剩余HP: ${target.hp}/${target.hero.maxHp})`, 'damage');
+      if (target.hp <= 0) {
+        this.handleDying(target);
+        if (!target.alive) break;
+      }
+    }
+
+    // 曹操奸雄技能
+    if (target.alive && target.hero.id === 'caocao' && card && this.pendingDamageCards[target.id]) {
+      const damageCard = this.pendingDamageCards[target.id];
+      delete this.pendingDamageCards[target.id];
+      if (target.isHuman) {
+        this.waitingForTarget = { type: 'jianxiong', target, card: damageCard };
+      } else {
+        this.doJianxiong(target, damageCard);
+      }
+    }
+
+    this.checkGameOver();
+  }
+
+  handleDying(player) {
+    this.addLog(`${player.hero.name}处于濒死状态，需要打出【桃】`, 'damage');
+
+    if (player.isHuman) {
+      const hasTao = player.hand.some(c => c.type === 'tao');
+      if (hasTao) {
+        this.waitingForTarget = { type: 'dying', player };
+        return;
+      }
+    } else {
+      const taoCard = player.hand.find(c => c.type === 'tao');
+      if (taoCard) {
+        this.discardCard(player, taoCard);
+        player.hp = 1;
+        this.addLog(`${player.hero.name}使用【桃】自救，回复至1点体力`, 'heal');
+        return;
+      }
+      // AI也可以向其他角色求救（简化处理：直接死亡）
+    }
+
+    player.alive = false;
+    this.addLog(`${player.hero.name}阵亡！`, 'important');
+  }
+
+  humanDyingUseTao(withTaoCard) {
+    if (!this.waitingForTarget || this.waitingForTarget.type !== 'dying') return;
+    const player = this.waitingForTarget.player;
+    this.waitingForTarget = null;
+
+    if (withTaoCard) {
+      this.discardCard(player, withTaoCard);
+      player.hp = 1;
+      this.addLog(`${player.hero.name}使用【桃】自救，回复至1点体力`, 'heal');
+    } else {
+      player.alive = false;
+      this.addLog(`${player.hero.name}阵亡！`, 'important');
+    }
+    this.checkGameOver();
+    this.render();
+  }
+
+  doJianxiong(player, card) {
+    card.ownerId = player.id;
+    player.hand.push(card);
+    this.addLog(`${player.hero.name}发动【奸雄】，获得了【${card.name}】`, 'important');
+  }
+
+  humanJianxiong(take) {
+    if (!this.waitingForTarget || this.waitingForTarget.type !== 'jianxiong') return;
+    const { target, card } = this.waitingForTarget;
+    this.waitingForTarget = null;
+    if (take) {
+      this.doJianxiong(target, card);
+    } else {
+      this.discardPile.push(card);
+      this.addLog(`${target.hero.name}放弃发动【奸雄】`);
+    }
+    this.render();
+  }
+
+  // ==================== 武将技能 ====================
+
+  useSkill(skillId) {
+    const player = this.players[this.currentPlayerIdx];
+    if (!player.isHuman || this.phase !== 'play') return;
+
+    switch (skillId) {
+      case 'rende': {
+        if (player.hand.length === 0) { this.addLog('没有手牌可以给出'); return; }
+        const targets = this.players.filter(p => p.alive && p.id !== player.id);
+        this.waitingForTarget = {
+          type: 'rende_target',
+          player, targets,
+        };
+        this.showTargetSelection({ name: '仁德', type: 'skill' }, targets, (target) => {
+          this.doRende(player, target);
+        });
+        break;
+      }
+      case 'zhiheng': {
+        if (this.zhihengUsedThisTurn) { this.addLog('本回合已经使用过【制衡】了'); return; }
+        if (player.hand.length === 0) { this.addLog('没有手牌可制衡'); return; }
+        // 简化：制衡所有手牌
+        const count = player.hand.length;
+        const cards = [...player.hand];
+        for (const c of cards) this.discardCard(player, c);
+        this.drawCard(player, count);
+        this.zhihengUsedThisTurn = true;
+        this.addLog(`${player.hero.name}发动【制衡】，弃置${count}张牌并摸了${count}张牌`, 'important');
+        this.render();
+        break;
+      }
+    }
+  }
+
+  doRende(player, target) {
+    const count = player.hand.length;
+    const cards = [...player.hand];
+    for (const c of cards) {
+      this.discardCard(player, c);
+      c.ownerId = target.id;
+      target.hand.push(c);
+    }
+    this.addLog(`${player.hero.name}发动【仁德】，将${count}张手牌交给${target.hero.name}`, 'important');
+    if (count >= 2 && player.hp < player.hero.maxHp) {
+      player.hp++;
+      this.addLog(`${player.hero.name}因【仁德】给出2张以上牌，回复1点体力`, 'heal');
+    }
+    this.render();
+  }
+
+  // ==================== AI逻辑 ====================
+
+  aiPlayPhase(player) {
+    if (this.phase !== 'play' || this.gameOver) return;
+    if (!player.alive) { this.nextPlayer(); return; }
+
+    // AI技能使用
+    if (player.hero.id === 'sunquan' && !this.zhihengUsedThisTurn && player.hand.length >= 3) {
+      const count = player.hand.length;
+      const cards = [...player.hand];
+      for (const c of cards) this.discardCard(player, c);
+      this.drawCard(player, count);
+      this.zhihengUsedThisTurn = true;
+      this.addLog(`${player.hero.name}发动【制衡】，弃置${count}张牌并摸了${count}张牌`, 'important');
+      this.render();
+    }
+
+    if (player.hero.id === 'liubei' && player.hand.length >= 3 && player.hp < player.hero.maxHp) {
+      // AI 刘备：找血量最低的盟友给牌
+      const allies = this.players.filter(p => p.alive && p.id !== player.id);
+      if (allies.length > 0) {
+        const ally = allies.reduce((a, b) => a.hp <= b.hp ? a : b);
+        const count = player.hand.length;
+        const cards = [...player.hand];
+        for (const c of cards) {
+          this.discardCard(player, c);
+          c.ownerId = ally.id;
+          ally.hand.push(c);
+        }
+        this.addLog(`${player.hero.name}发动【仁德】，将${count}张手牌交给${ally.hero.name}`, 'important');
+        if (count >= 2) { player.hp++; this.addLog(`${player.hero.name}回复1点体力`, 'heal'); }
+        this.render();
+        setTimeout(() => this.aiPlayCards(player), 600);
+        return;
+      }
+    }
+
+    this.aiPlayCards(player);
+  }
+
+  aiPlayCards(player) {
+    if (this.gameOver) return;
+    this.render();
+
+    // 优先使用无中生有
+    const wuzhongIdx = player.hand.findIndex(c => c.type === 'wuzhong');
+    if (wuzhongIdx >= 0) {
+      const card = player.hand[wuzhongIdx];
+      this.discardCard(player, card);
+      this.resolveWuzhong(player);
+      this.render();
+      setTimeout(() => this.aiPlayCards(player), 600);
+      return;
+    }
+
+    // 使用南蛮入侵/万箭齐发（如果自己的防御足够）
+    const aoeIdx = player.hand.findIndex(c => c.type === 'nanman' || c.type === 'wanjian');
+    if (aoeIdx >= 0) {
+      const card = player.hand[aoeIdx];
+      this.discardCard(player, card);
+      if (card.type === 'nanman') this.resolveNanman(player);
+      else this.resolveWanjian(player);
+      this.render();
+      setTimeout(() => this.aiPlayCards(player), 1200);
+      return;
+    }
+
+    // 桃园结义
+    const taoyuanIdx = player.hand.findIndex(c => c.type === 'taoyuan');
+    if (taoyuanIdx >= 0) {
+      const card = player.hand[taoyuanIdx];
+      this.discardCard(player, card);
+      this.resolveTaoyuan(player);
+      this.render();
+      setTimeout(() => this.aiPlayCards(player), 600);
+      return;
+    }
+
+    // 五谷丰登
+    const wuguIdx = player.hand.findIndex(c => c.type === 'wugu');
+    if (wuguIdx >= 0) {
+      const card = player.hand[wuguIdx];
+      this.discardCard(player, card);
+      this.resolveWugu(player);
+      this.render();
+      setTimeout(() => this.aiPlayCards(player), 600);
+      return;
+    }
+
+    // 过河拆桥 / 顺手牵羊
+    const toolIdx = player.hand.findIndex(c => c.type === 'guohe' || c.type === 'shunshou');
+    if (toolIdx >= 0) {
+      const card = player.hand[toolIdx];
+      const targets = this.players.filter(p => p.alive && p.id !== player.id && p.hand.length > 0);
+      if (targets.length > 0) {
+        const target = targets.reduce((a, b) => a.hp >= b.hp ? a : b); // 优先针对血量高的
+        this.discardCard(player, card);
+        if (card.type === 'guohe') this.resolveGuohe(target);
+        else this.resolveShunshou(player, target);
+        this.render();
+        setTimeout(() => this.aiPlayCards(player), 600);
+        return;
+      }
+    }
+
+    // 决斗
+    const juedouIdx = player.hand.findIndex(c => c.type === 'juedou');
+    if (juedouIdx >= 0) {
+      const card = player.hand[juedouIdx];
+      const targets = this.players.filter(p => p.alive && p.id !== player.id);
+      if (targets.length > 0) {
+        const target = targets.reduce((a, b) => a.hand.length <= b.hand.length ? a : b);
+        this.discardCard(player, card);
+        this.resolveJuedou(player, target);
+        this.render();
+        setTimeout(() => this.aiPlayCards(player), 600);
+        return;
+      }
+    }
+
+    // 杀
+    if (!this.shaUsedThisTurn) {
+      const shaIdx = player.hand.findIndex(c => c.type === 'sha');
+      if (shaIdx >= 0) {
+        const card = player.hand[shaIdx];
+        const targets = this.players.filter(p => p.alive && p.id !== player.id && this.calcDistance(player, p) <= 1);
+        if (targets.length > 0) {
+          const target = targets.reduce((a, b) => a.hp <= b.hp ? a : b);
+          this.discardCard(player, card);
+          this.shaUsedThisTurn = true;
+          this.resolveSha(player, target, card);
+          this.render();
+          setTimeout(() => this.aiPlayCards(player), 1000);
+          return;
+        }
+      }
+    }
+
+    // 桃
+    if (player.hp <= 2) {
+      const taoIdx = player.hand.findIndex(c => c.type === 'tao');
+      if (taoIdx >= 0) {
+        const card = player.hand[taoIdx];
+        this.discardCard(player, card);
+        this.resolveTao(player);
+        this.render();
+        setTimeout(() => this.aiPlayCards(player), 600);
+        return;
+      }
+    }
+
+    // 结束出牌阶段
+    this.endPlayPhase();
+  }
+
+  endPlayPhase() {
+    this.phase = 'discard';
+    const player = this.players[this.currentPlayerIdx];
+    if (player.hand.length > player.hp) {
+      const discardCount = player.hand.length - player.hp;
+      // AI弃牌
+      const toDiscard = player.hand.slice(0, discardCount);
+      for (const c of toDiscard) this.discardCard(player, c);
+      this.addLog(`${player.hero.name}弃置了${discardCount}张牌（手牌数超过体力值）`);
+    }
+    this.nextPlayer();
+  }
+
+  humanEndPlayPhase() {
+    if (this.phase !== 'play') return;
+    this.phase = 'discard';
+    const player = this.players[this.currentPlayerIdx];
+    if (player.hand.length > player.hp) {
+      this.addLog(`你需要弃置 ${player.hand.length - player.hp} 张牌`);
+      // 进入弃牌选择模式
+      this.waitingForTarget = {
+        type: 'discard_phase',
+        player,
+        needDiscard: player.hand.length - player.hp,
+        selected: [],
+      };
+      this.render();
+    } else {
+      this.nextPlayer();
+    }
+  }
+
+  humanSelectDiscard(cardIdx) {
+    if (!this.waitingForTarget || this.waitingForTarget.type !== 'discard_phase') return;
+    const wt = this.waitingForTarget;
+    const idx = wt.selected.indexOf(cardIdx);
+    if (idx >= 0) {
+      wt.selected.splice(idx, 1);
+    } else {
+      wt.selected.push(cardIdx);
+    }
+    this.render();
+  }
+
+  humanConfirmDiscard() {
+    if (!this.waitingForTarget || this.waitingForTarget.type !== 'discard_phase') return;
+    const { player, selected, needDiscard } = this.waitingForTarget;
+    if (selected.length !== needDiscard) {
+      this.addLog(`请弃置正好 ${needDiscard} 张牌`);
+      return;
+    }
+    this.waitingForTarget = null;
+    const cards = selected.sort((a,b) => b-a).map(i => player.hand[i]);
+    for (const c of cards) this.discardCard(player, c);
+    this.addLog(`${player.hero.name}弃置了${cards.length}张牌`);
+    this.nextPlayer();
+  }
+
+  // ==================== 回合控制 ====================
+
+  nextPlayer() {
+    if (this.gameOver) return;
+    this.currentPlayerIdx = (this.currentPlayerIdx + 1) % this.players.length;
+    // 跳过已死角色
+    let loops = 0;
+    while (!this.players[this.currentPlayerIdx].alive && loops < this.players.length) {
+      this.currentPlayerIdx = (this.currentPlayerIdx + 1) % this.players.length;
+      loops++;
+    }
+    this.phase = 'idle';
+    this.selectedCardIdx = -1;
+    this.shaUsedThisTurn = false;
+    this.zhihengUsedThisTurn = false;
+    this.render();
+    setTimeout(() => this.startCurrentTurn(), 1000);
+  }
+
+  checkGameOver() {
+    const alive = this.players.filter(p => p.alive);
+    if (alive.length <= 1) {
+      this.gameOver = true;
+      this.phase = 'idle';
+      const winner = alive[0];
+      const isHumanWin = winner && winner.isHuman;
+      this.addLog('====================================', 'important');
+      this.addLog(`${winner ? winner.hero.name : '无人'} 获得了胜利！`, 'important');
+      if (isHumanWin) this.addLog('恭喜你赢得了比赛！🎉', 'important');
+      else this.addLog('你输了…再接再厉！', 'damage');
+      this.render();
+    }
+  }
+
+  // ==================== 日志 ====================
+
+  addLog(msg, type = '') {
+    this.logEntries.push({ msg, type, time: Date.now() });
+    if (this.logEntries.length > 200) this.logEntries.shift();
+  }
+
+  // ==================== 渲染 ====================
+
+  render() {
+    const app = document.getElementById('app');
+    const player = this.players[this.currentPlayerIdx];
+    const humanPlayer = this.players.find(p => p.isHuman);
+    const isHumanTurn = player && player.isHuman;
+
+    let html = '';
+
+    // 顶部栏
+    html += `
+    <div class="top-bar">
+      <h1>🏯 三国杀</h1>
+      <div class="game-info">回合: ${player ? player.hero.name : ''}</div>
+      <div class="deck-info">
+        <span class="deck-count">牌堆: ${this.deck.length} | 弃牌: ${this.discardPile.length}</span>
+        <div class="deck-visual">牌<br>堆</div>
+      </div>
+    </div>`;
+
+    html += '<div class="game-board">';
+
+    // 对手区域
+    html += '<div class="opponents-area">';
+    const opponents = this.players.filter(p => p.id !== humanPlayer.id);
+    for (const opp of opponents) {
+      html += this.renderHeroPanel(opp, false);
+    }
+    html += '</div>';
+
+    // 人类玩家区域
+    html += '<div class="player-area">';
+    html += this.renderHeroPanel(humanPlayer, true);
+
+    // 人类手牌
+    if (humanPlayer.alive) {
+      html += '<div class="hand-cards-area">';
+      html += `<div class="hand-label"><span>你的手牌 (${humanPlayer.hand.length}张)</span>`;
+
+      // 弃牌阶段提示
+      if (this.waitingForTarget && this.waitingForTarget.type === 'discard_phase') {
+        const wt = this.waitingForTarget;
+        html += `<span style="color:#ff6060;">请选择 ${wt.needDiscard} 张牌弃置 (已选 ${wt.selected.length})</span>`;
+      }
+      html += '</div>';
+
+      html += '<div class="hand-cards">';
+      for (let i = 0; i < humanPlayer.hand.length; i++) {
+        const card = humanPlayer.hand[i];
+        const isSelected = this.selectedCardIdx === i;
+        const isDiscardSelected = this.waitingForTarget?.type === 'discard_phase'
+          && this.waitingForTarget.selected.includes(i);
+        let cardClass = this.getCardStyle(card);
+        if (isSelected || isDiscardSelected) cardClass += ' selected';
+        let clickable = true;
+
+        // 响应阶段不可点击手牌（除非是响应选择）
+        if (this.waitingForTarget) {
+          const wt = this.waitingForTarget;
+          if (wt.type === 'shan_response' && card.type !== 'shan') clickable = false;
+          if (wt.type === 'juedou_defend' && card.type !== 'sha') clickable = false;
+          if (wt.type === 'aoe_response' && card.type !== wt.requiredType) clickable = false;
+          if (wt.type === 'dying' && card.type !== 'tao') clickable = false;
+          if (wt.type === 'guohe_discard' || wt.type === 'shunshou_steal') clickable = true;
+          if (wt.type === 'discard_phase') clickable = true;
+          if (!['discard_phase', 'guohe_discard', 'shunshou_steal', 'shan_response', 'juedou_defend', 'aoe_response', 'dying'].includes(wt.type)) clickable = false;
+        }
+
+        if (!isHumanTurn && !this.waitingForTarget) clickable = false;
+
+        html += `<div class="card ${cardClass} ${clickable ? '' : 'disabled'}"
+          onclick="game.handleCardClick(${i})">
+          <div class="card-name">${card.name}</div>
+          <div class="card-icon">${card.icon}</div>
+          <div class="card-suit">${card.suit}${this.getNumberStr(card.number)}</div>
+        </div>`;
+      }
+      if (humanPlayer.hand.length === 0) {
+        html += '<div style="color:#604020;padding:20px;">暂无手牌</div>';
+      }
+      html += '</div></div>';
+    }
+
+    // 响应提示
+    if (this.waitingForTarget) {
+      const wt = this.waitingForTarget;
+      html += '<div class="action-bar">';
+      if (wt.type === 'shan_response' && wt.hasShan) {
+        html += `<span style="color:#ff6060;margin-right:10px;">你需要打出【闪】来响应${wt.source.hero.name}的【杀】</span>`;
+        html += '<button class="btn danger" onclick="game.humanRespondShan(false)">不出闪（受伤害）</button>';
+      }
+      if (wt.type === 'juedou_defend') {
+        html += `<span style="color:#ff6060;margin-right:10px;">${wt.challenger.hero.name}向你发起决斗！请出【杀】</span>`;
+        html += '<button class="btn danger" onclick="game.humanRespondJuedou(false)">不出杀（受伤害）</button>';
+      }
+      if (wt.type === 'aoe_response') {
+        const reqName = wt.requiredType === 'sha' ? '杀' : '闪';
+        html += `<span style="color:#ff6060;margin-right:10px;">需要打出【${reqName}】来响应${wt.source.hero.name}</span>`;
+        const hasCard = wt.target.hand.some(c => c.type === wt.requiredType);
+        if (!hasCard) {
+          html += '<span style="color:#ff6060;">没有可用的牌，将受到伤害...</span>';
+        } else {
+          html += `<button class="btn danger" onclick="game.humanRespondAOE(null)">不出（受伤害）</button>`;
+        }
+      }
+      if (wt.type === 'dying') {
+        html += '<span style="color:#ff6060;margin-right:10px;">你处于濒死状态！使用【桃】自救</span>';
+        html += '<button class="btn danger" onclick="game.humanDyingUseTao(null)">不使用（阵亡）</button>';
+      }
+      if (wt.type === 'jianxiong') {
+        html += `<span style="color:#ffa040;margin-right:10px;">是否发动【奸雄】获得【${wt.card.name}】？</span>`;
+        html += '<button class="btn skill-btn" onclick="game.humanJianxiong(true)">发动</button>';
+        html += '<button class="btn" onclick="game.humanJianxiong(false)">不发动</button>';
+      }
+      if (wt.type === 'discard_phase') {
+        html += `<span style="color:#ff6060;margin-right:10px;">已选 ${wt.selected.length}/${wt.needDiscard} 张</span>`;
+        html += `<button class="btn danger" onclick="game.humanConfirmDiscard()" ${wt.selected.length !== wt.needDiscard ? 'disabled' : ''}>确认弃置</button>`;
+      }
+      html += '</div>';
+    }
+
+    // 出牌阶段按钮
+    if (isHumanTurn && this.phase === 'play' && !this.waitingForTarget) {
+      html += '<div class="action-bar">';
+      html += `<button class="btn" onclick="game.playSelectedCard()" ${this.selectedCardIdx < 0 ? 'disabled' : ''}>出牌</button>`;
+      // 技能按钮
+      if (humanPlayer.hero.id === 'liubei' && humanPlayer.hand.length > 0) {
+        html += '<button class="btn skill-btn" onclick="game.useSkill(\'rende\')">仁德</button>';
+      }
+      if (humanPlayer.hero.id === 'sunquan' && !this.zhihengUsedThisTurn && humanPlayer.hand.length > 0) {
+        html += '<button class="btn skill-btn" onclick="game.useSkill(\'zhiheng\')">制衡</button>';
+      }
+      html += '<button class="btn" onclick="game.humanEndPlayPhase()">结束出牌</button>';
+      html += '</div>';
+    }
+
+    html += '</div></div>';
+
+    // 日志
+    html += '<div class="log-area">';
+    const recentLogs = this.logEntries.slice(-30);
+    for (const log of recentLogs) {
+      html += `<div class="log-entry ${log.type}">${log.msg}</div>`;
+    }
+    html += '</div>';
+
+    // 游戏结束弹窗
+    if (this.gameOver) {
+      const alive = this.players.filter(p => p.alive);
+      const isHumanWin = alive.length > 0 && alive[0].isHuman;
+      html += `
+      <div class="modal">
+        <div class="modal-content">
+          <h2>${isHumanWin ? '🎉 胜利！' : '💀 失败…'}</h2>
+          <p>${alive.length > 0 ? alive[0].hero.name + ' 获得了最终胜利！' : '全员阵亡！'}</p>
+          <p>${isHumanWin ? '恭喜你击败了所有对手！' : '再接再厉，下次一定能赢！'}</p>
+          <button class="btn" onclick="game.restart()" style="margin-top:15px;">再来一局</button>
+        </div>
+      </div>`;
+    }
+
+    app.innerHTML = html;
+    app.querySelector('.log-area').scrollTop = app.querySelector('.log-area').scrollHeight;
+  }
+
+  renderHeroPanel(player, isHuman) {
+    let classes = 'hero-panel';
+    if (this.currentPlayerIdx === this.players.indexOf(player) && !this.gameOver) classes += ' active-turn';
+    if (!player.alive) classes += ' dead';
+    if (isHuman) classes += ' current-player-panel';
+
+    let html = `<div class="${classes}">`;
+    html += '<div class="hero-header">';
+    html += `<div class="hero-avatar ${player.hero.avatarClass}">${player.hero.name[0]}</div>`;
+    html += `<div><div class="hero-name">${player.hero.name}</div><div class="hero-title">${player.hero.title}</div></div>`;
+    html += '</div>';
+
+    // 血量
+    html += '<div class="hp-bar"><div class="hp-dots">';
+    for (let i = 0; i < player.hero.maxHp; i++) {
+      html += `<div class="hp-dot ${i >= player.hp ? 'lost' : ''}"></div>`;
+    }
+    html += `</div><span style="font-size:11px;color:#c0a060;">${player.hp}/${player.hero.maxHp}</span></div>`;
+
+    // 技能
+    html += '<div class="skills">';
+    for (const skill of player.hero.skills) {
+      html += `<span class="skill-badge" title="${skill.desc}">${skill.name}</span>`;
+    }
+    html += '</div>';
+
+    html += `<div class="hand-count">手牌: ${player.hand.length}张</div>`;
+
+    // 装备区
+    html += '<div class="equipment-area">';
+    const equipNames = { weapon: '武器', armor: '防具', plusHorse: '+1马', minusHorse: '-1马' };
+    for (const [slot, label] of Object.entries(equipNames)) {
+      html += `<div class="equip-slot ${player.equipment[slot] ? 'filled' : ''}">${label}</div>`;
+    }
+    html += '</div>';
+
+    // 展示手牌（对手的牌背面朝上）
+    if (player.hand.length > 0) {
+      html += '<div class="hand-display">';
+      for (const card of player.hand) {
+        if (player.isHuman || (this.waitingForTarget?.type === 'guohe_discard' && this.waitingForTarget.target.id === player.id)
+          || (this.waitingForTarget?.type === 'shunshou_steal' && this.waitingForTarget.target.id === player.id)) {
+          html += `<div class="mini-card ${this.getMiniCardStyle(card)}">${card.name}</div>`;
+        } else {
+          html += '<div class="mini-card face-down">?</div>';
+        }
+      }
+      html += '</div>';
+    }
+
+    html += '</div>';
+    return html;
+  }
+
+  getCardStyle(card) {
+    switch (card.type) {
+      case 'sha': return 'sha';
+      case 'shan': return 'shan';
+      case 'tao': return 'tao';
+      case 'juedou': return 'juedou';
+      default: return 'other';
+    }
+  }
+
+  getMiniCardStyle(card) {
+    return this.getCardStyle(card);
+  }
+
+  getNumberStr(num) {
+    const map = { 1: 'A', 11: 'J', 12: 'Q', 13: 'K' };
+    return map[num] || num;
+  }
+
+  handleCardClick(idx) {
+    const humanPlayer = this.players.find(p => p.isHuman);
+    if (!humanPlayer || !humanPlayer.alive) return;
+
+    // 响应阶段
+    if (this.waitingForTarget) {
+      const wt = this.waitingForTarget;
+      const card = humanPlayer.hand[idx];
+
+      if (wt.type === 'shan_response' && card.type === 'shan') {
+        this.humanRespondShan(card);
+        return;
+      }
+      if (wt.type === 'juedou_defend' && card.type === 'sha') {
+        this.humanRespondJuedou(card);
+        return;
+      }
+      if (wt.type === 'aoe_response' && card.type === wt.requiredType) {
+        this.humanRespondAOE(card);
+        return;
+      }
+      if (wt.type === 'dying' && card.type === 'tao') {
+        this.humanDyingUseTao(card);
+        return;
+      }
+      if (wt.type === 'guohe_discard') {
+        this.humanGuoheDiscard(idx);
+        return;
+      }
+      if (wt.type === 'shunshou_steal') {
+        this.humanShunshouSteal(idx);
+        return;
+      }
+      if (wt.type === 'discard_phase') {
+        this.humanSelectDiscard(idx);
+        return;
+      }
+      return;
+    }
+
+    // 正常出牌阶段
+    if (this.phase === 'play' && this.players[this.currentPlayerIdx].isHuman) {
+      this.selectCard(idx);
+    }
+  }
+
+  restart() {
+    this.init(this.humanPlayerId);
+  }
+}
+
+// ==================== 启动游戏 ====================
+
+let game;
+let heroSelectHtml = '';
+
+function startGame(heroId) {
+  document.getElementById('app').innerHTML = '';
+  game = new Game();
+  window.game = game;
+  game.init(heroId);
+  game.render();
+}
+
+function showHeroSelect() {
+  const app = document.getElementById('app');
+  app.innerHTML = `
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:80vh;gap:30px;">
+      <h1 style="font-size:36px;color:#f0d060;text-shadow:0 0 20px rgba(240,208,96,0.5);letter-spacing:8px;">三国杀</h1>
+      <p style="color:#c0a060;font-size:16px;">选择你的武将</p>
+      <div style="display:flex;gap:30px;flex-wrap:wrap;justify-content:center;">
+        ${['liubei', 'sunquan', 'caocao'].map(id => {
+          const h = HEROES[id];
+          return `
+          <div onclick="startGame('${id}')" style="
+            width:200px;padding:25px;background:linear-gradient(180deg,rgba(30,15,5,0.9),rgba(50,25,10,0.95));
+            border:2px solid #8b6914;border-radius:16px;cursor:pointer;text-align:center;
+            transition:all 0.3s;
+          " onmouseover="this.style.transform='scale(1.05)';this.style.borderColor='#f0d060';this.style.boxShadow='0 0 30px rgba(240,208,96,0.3)'"
+             onmouseout="this.style.transform='scale(1)';this.style.borderColor='#8b6914';this.style.boxShadow='none'">
+            <div class="hero-avatar ${h.avatarClass}" style="margin:0 auto 15px;width:80px;height:80px;font-size:36px;">${h.name[0]}</div>
+            <div style="font-size:22px;font-weight:bold;margin-bottom:4px;">${h.name}</div>
+            <div style="font-size:12px;color:#a08050;margin-bottom:12px;">${h.title}</div>
+            <div style="font-size:11px;color:#a08050;">体力: ${'❤️'.repeat(h.maxHp)}</div>
+            <div style="font-size:11px;color:#b09030;margin-top:8px;display:flex;gap:5px;justify-content:center;flex-wrap:wrap;">
+              ${h.skills.map(s => `<span style="background:rgba(139,105,20,0.3);border:1px solid #8b6914;border-radius:4px;padding:2px 8px;">${s.name}</span>`).join('')}
+            </div>
+            <div style="font-size:10px;color:#806030;margin-top:8px;line-height:1.4;">${h.skills[0].desc}</div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+  `;
+}
+
+showHeroSelect();
+</script>
+</body>
+</html>
