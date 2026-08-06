@@ -89,9 +89,9 @@ body {
 
 .equipment-area { display: flex; gap: 4px; margin-top: 4px; min-height: 20px; }
 .equip-slot {
-  width: 35px; height: 24px; border: 1px dashed #4a3010; border-radius: 4px;
+  width: auto; min-width: 35px; padding: 0 4px; height: 24px; border: 1px dashed #4a3010; border-radius: 4px;
   display: flex; align-items: center; justify-content: center; font-size: 9px;
-  color: #604020;
+  color: #604020; overflow: hidden; white-space: nowrap;
 }
 .equip-slot.filled { border-color: #8b6914; background: rgba(139,105,20,0.2); color: #f0d060; }
 
@@ -112,6 +112,7 @@ body {
 .mini-card.tao { background: linear-gradient(135deg, #3a1010, #8b2020); color: #ff8080; border-color: #c03030; }
 .mini-card.juedou { background: linear-gradient(135deg, #2a1a0a, #5a3a1a); color: #ffa040; border-color: #8b5010; }
 .mini-card.other { background: linear-gradient(135deg, #1a2a3a, #2a4a6a); color: #80c0ff; border-color: #306090; }
+.mini-card.weapon { background: linear-gradient(135deg, #4a2a08, #8b5a1a); color: #ffcc40; border-color: #c09020; }
 .mini-card.face-down {
   background: linear-gradient(135deg, #1a3a5c, #2a5a8c);
   color: transparent; border-color: #306090;
@@ -136,6 +137,9 @@ body {
 .card.disabled { opacity: 0.6; cursor: not-allowed; }
 .card.wusheng-able { border-color: rgba(255,100,100,0.6); box-shadow: 0 0 10px rgba(255,100,100,0.3); }
 .card.wusheng-able:hover:not(.disabled) { border-color: #ff4040; box-shadow: 0 0 18px rgba(255,64,64,0.5); }
+.card.weapon { border-color: #c09020; background: linear-gradient(135deg, #4a2a08, #6b3a10); }
+.card.weapon .card-name { color: #ffcc40; }
+.card.weapon .card-suit { color: #d0a020; opacity: 0.8; }
 .card-name { font-size: 13px; margin-bottom: 3px; }
 .card-suit { font-size: 9px; opacity: 0.7; }
 .card-icon { font-size: 22px; margin: 3px 0; }
@@ -219,41 +223,8 @@ body {
 </div>
 
 <script src="heroes.js"></script>
+<script src="cards.js"></script>
 <script>
-// ==================== 数据定义 ====================
-const SUITS = ['♠', '♥', '♣', '♦'];
-const SUIT_NAMES = { '♠': '黑桃', '♥': '红桃', '♣': '梅花', '♦': '方块' };
-
-function isRedSuit(suit) { return suit === '♥' || suit === '♦'; }
-
-const CARD_DEFS = [
-  { id: 'sha', name: '杀', icon: '⚔️', type: 'sha', category: 'basic' },
-  { id: 'shan', name: '闪', icon: '🛡️', type: 'shan', category: 'basic' },
-  { id: 'tao', name: '桃', icon: '🍑', type: 'tao', category: 'basic' },
-  { id: 'juedou', name: '决斗', icon: '🤺', type: 'juedou', category: 'tool' },
-  { id: 'guohe', name: '过河拆桥', icon: '🌉', type: 'guohe', category: 'tool' },
-  { id: 'shunshou', name: '顺手牵羊', icon: '🐑', type: 'shunshou', category: 'tool' },
-  { id: 'wuzhong', name: '无中生有', icon: '✨', type: 'wuzhong', category: 'tool' },
-  { id: 'nanman', name: '南蛮入侵', icon: '🐘', type: 'nanman', category: 'tool' },
-  { id: 'wanjian', name: '万箭齐发', icon: '🏹', type: 'wanjian', category: 'tool' },
-  { id: 'taoyuan', name: '桃园结义', icon: '🌸', type: 'taoyuan', category: 'tool' },
-  { id: 'wugu', name: '五谷丰登', icon: '🌾', type: 'wugu', category: 'tool' },
-];
-
-const DECK_COMPOSITION = [
-  { cardId: 'sha', count: 25 },
-  { cardId: 'shan', count: 14 },
-  { cardId: 'tao', count: 7 },
-  { cardId: 'juedou', count: 4 },
-  { cardId: 'guohe', count: 5 },
-  { cardId: 'shunshou', count: 4 },
-  { cardId: 'wuzhong', count: 4 },
-  { cardId: 'nanman', count: 3 },
-  { cardId: 'wanjian', count: 2 },
-  { cardId: 'taoyuan', count: 2 },
-  { cardId: 'wugu', count: 2 },
-];
-
 // ==================== 游戏引擎 ====================
 
 class Game {
@@ -446,20 +417,27 @@ class Game {
     const card = player.hand[this.selectedCardIdx];
     if (!card) return;
 
-    // 关羽武圣：红色牌当杀使用
+    // 关羽武圣：红色牌当杀使用（武器牌优先装备）
     let effectiveType = card.type;
-    if (player.hero.id === 'guanyu' && card.type !== 'sha' && isRedSuit(card.suit)) {
+    if (card.type !== 'weapon' && player.hero.id === 'guanyu' && card.type !== 'sha' && isRedSuit(card.suit)) {
       effectiveType = 'sha';
     }
 
-    if (effectiveType === 'sha') {
+    if (card.type === 'weapon') {
+      const idx = player.hand.indexOf(card);
+      if (idx >= 0) player.hand.splice(idx, 1);
+      this.equipWeapon(player, card);
+      this.selectedCardIdx = -1;
+      this.render();
+    } else if (effectiveType === 'sha') {
       // 非张飞且非武圣转换的杀，检查次数
       if (player.hero.id !== 'zhangfei' && this.shaUsedThisTurn && card.type === 'sha') {
         this.addLog('本回合已经使用过【杀】了');
         return;
       }
       const targets = this.getValidTargets({ ...card, type: 'sha' });
-      if (targets.length === 0) { this.addLog('没有可选目标（所有角色距离均大于1）'); return; }
+      const shaRange = this.getShaRange(player);
+      if (targets.length === 0) { this.addLog(`没有可选目标（所有角色距离均大于${shaRange}）`); return; }
       if (targets.length === 1) {
         this.useCardOnTarget(card, targets[0], effectiveType);
         this.selectedCardIdx = -1;
@@ -488,19 +466,37 @@ class Game {
     const player = this.players[this.currentPlayerIdx];
     const aliveOthers = this.players.filter(p => p.alive && p.id !== player.id);
     switch (card.type) {
-      case 'sha': return aliveOthers.filter(t => this.calcDistance(player, t) <= 1);
+      case 'sha': {
+        const shaRange = this.getShaRange(player);
+        return aliveOthers.filter(t => this.calcDistance(player, t, true) <= shaRange);
+      }
       case 'juedou': case 'guohe': case 'shunshou': return aliveOthers;
       default: return [];
     }
   }
 
-  calcDistance(from, to) {
+  getShaRange(player) {
+    return player.equipment.weapon ? player.equipment.weapon.range : 1;
+  }
+
+  calcDistance(from, to, forSha = false) {
     let dist = 1;
-    if (to.equipment.plusHorse) dist += 1;
+    if (to.equipment.plusHorse && !(forSha && from.equipment.weapon && from.equipment.weapon.id === 'qinggang')) dist += 1;
     if (from.equipment.minusHorse) dist -= 1;
     if (from.hero.id === 'gongsunzan' && from.hp > 2) dist -= 1;
     if (to.hero.id === 'gongsunzan' && to.hp <= 2) dist += 1;
     return Math.max(1, dist);
+  }
+
+  equipWeapon(player, card) {
+    // 卸下旧武器
+    if (player.equipment.weapon) {
+      const old = player.equipment.weapon;
+      this.addLog(`${player.hero.name}卸下了【${old.name}】`, 'equip');
+      this.discardPile.push(old);
+    }
+    player.equipment.weapon = card;
+    this.addLog(`${player.hero.name}装备了【${card.name}】(范围${card.range})`, 'equip');
   }
 
   showTargetSelection(card, targets, callback) {
@@ -701,8 +697,13 @@ class Game {
         this.discardCard(target, card);
         this.addLog(`${target.hero.name}被迫弃置了【${card.name}】`);
       }
+    } else if (target.equipment.weapon) {
+      const eq = target.equipment.weapon;
+      target.equipment.weapon = null;
+      this.discardPile.push(eq);
+      this.addLog(`${target.hero.name}的武器【${eq.name}】被弃置`);
     } else {
-      this.addLog(`${target.hero.name}没有手牌可弃`);
+      this.addLog(`${target.hero.name}没有手牌或装备可弃`);
     }
     this.render();
   }
@@ -902,6 +903,26 @@ class Game {
       if (target.hp <= 0) {
         this.handleDying(target);
         if (!target.alive) break;
+      }
+    }
+    // 武器特效（每张杀触发一次）
+    if (source && source.equipment.weapon && card && card.type === 'sha' && target.alive) {
+      const wid = source.equipment.weapon.id;
+      if (wid === 'zhuque') {
+        target.hp--;
+        this.addLog(`【朱雀羽扇】额外造成1点伤害 (剩余HP: ${target.hp}/${target.hero.maxHp})`, 'damage');
+        if (target.hp <= 0) { this.handleDying(target); }
+      }
+      if (wid === 'guding' && target.hand.length === 0) {
+        target.hp--;
+        this.addLog(`【古锭刀】对空手角色额外造成1点伤害 (剩余HP: ${target.hp}/${target.hero.maxHp})`, 'damage');
+        if (target.hp <= 0) { this.handleDying(target); }
+      }
+      if (wid === 'qilin' && target.equipment.plusHorse) {
+        const horse = target.equipment.plusHorse;
+        this.discardPile.push(horse);
+        target.equipment.plusHorse = null;
+        this.addLog(`【麒麟弓】弃置了${target.hero.name}的+1马【${horse.name}】`, 'skill');
       }
     }
     this.checkGameOver();
@@ -1287,6 +1308,19 @@ class Game {
     if (this.gameOver) return;
     this.render();
 
+    // 装备武器
+    const weaponIdx = player.hand.findIndex(c => c.type === 'weapon');
+    if (weaponIdx >= 0) {
+      const card = player.hand[weaponIdx];
+      if (!player.equipment.weapon || card.range > player.equipment.weapon.range) {
+        player.hand.splice(weaponIdx, 1);
+        this.equipWeapon(player, card);
+        this.render();
+        setTimeout(() => this.aiPlayCards(player), 300);
+        return;
+      }
+    }
+
     // 无中生有
     const wuzhongIdx = player.hand.findIndex(c => c.type === 'wuzhong');
     if (wuzhongIdx >= 0) {
@@ -1336,7 +1370,7 @@ class Game {
     const toolIdx = player.hand.findIndex(c => c.type === 'guohe' || c.type === 'shunshou');
     if (toolIdx >= 0) {
       const card = player.hand[toolIdx];
-      const targets = this.players.filter(p => p.alive && p.id !== player.id && p.hand.length > 0);
+      const targets = this.players.filter(p => p.alive && p.id !== player.id && (p.hand.length > 0 || (card.type === 'guohe' && p.equipment.weapon)));
       if (targets.length > 0) {
         const target = targets.reduce((a, b) => a.hp >= b.hp ? a : b);
         this.discardCard(player, card);
@@ -1373,7 +1407,8 @@ class Game {
       }
       if (shaIdx >= 0) {
         const card = player.hand[shaIdx];
-        const targets = this.players.filter(p => p.alive && p.id !== player.id && this.calcDistance(player, p) <= 1);
+        const shaRange = this.getShaRange(player);
+        const targets = this.players.filter(p => p.alive && p.id !== player.id && this.calcDistance(player, p, true) <= shaRange);
         if (targets.length > 0) {
           const target = targets.reduce((a, b) => a.hp <= b.hp ? a : b);
           this.discardCard(player, card);
@@ -1755,8 +1790,13 @@ class Game {
     html += `<div class="hand-count">手牌: ${player.hand.length}张</div>`;
 
     html += '<div class="equipment-area">';
-    const equipNames = { weapon: '武器', armor: '防具', plusHorse: '+1🐴', minusHorse: '-1🐴' };
-    for (const [slot, label] of Object.entries(equipNames)) {
+    const equipDisplay = [
+      { slot: 'weapon', label: player.equipment.weapon ? player.equipment.weapon.name : '武器' },
+      { slot: 'armor', label: '防具' },
+      { slot: 'plusHorse', label: '+1🐴' },
+      { slot: 'minusHorse', label: '-1🐴' },
+    ];
+    for (const { slot, label } of equipDisplay) {
       html += `<div class="equip-slot ${player.equipment[slot] ? 'filled' : ''}">${label}</div>`;
     }
     html += '</div>';
@@ -1781,7 +1821,7 @@ class Game {
   getCardStyle(card) {
     switch (card.type) {
       case 'sha': return 'sha'; case 'shan': return 'shan'; case 'tao': return 'tao';
-      case 'juedou': return 'juedou'; default: return 'other';
+      case 'juedou': return 'juedou'; case 'weapon': return 'weapon'; default: return 'other';
     }
   }
 
