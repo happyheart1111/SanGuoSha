@@ -215,63 +215,13 @@ body {
   </div>
 </div>
 
+<script src="heroes.js"></script>
 <script>
 // ==================== 数据定义 ====================
 const SUITS = ['♠', '♥', '♣', '♦'];
 const SUIT_NAMES = { '♠': '黑桃', '♥': '红桃', '♣': '梅花', '♦': '方块' };
 
 function isRedSuit(suit) { return suit === '♥' || suit === '♦'; }
-
-const HEROES = {
-  liubei: {
-    id: 'liubei', name: '刘备', title: '乱世的枭雄', faction: '蜀',
-    avatarClass: 'liubei', maxHp: 4,
-    skills: [{ id: 'rende', name: '仁德', desc: '出牌阶段，你可以将任意张手牌交给一名其他角色。若给出的牌达到两张或更多，你回复1点体力。' }]
-  },
-  sunquan: {
-    id: 'sunquan', name: '孙权', title: '年轻的贤君', faction: '吴',
-    avatarClass: 'sunquan', maxHp: 4,
-    skills: [{ id: 'zhiheng', name: '制衡', desc: '出牌阶段，你可以弃置任意张牌，然后摸等量的牌。每回合限一次。' }]
-  },
-  caocao: {
-    id: 'caocao', name: '曹操', title: '乱世的奸雄', faction: '魏',
-    avatarClass: 'caocao', maxHp: 4,
-    skills: [{ id: 'jianxiong', name: '奸雄', desc: '当你受到伤害后，你可以获得对你造成伤害的牌。' }]
-  },
-  guojia: {
-    id: 'guojia', name: '郭嘉', title: '早终的先知', faction: '魏',
-    avatarClass: 'guojia', maxHp: 3,
-    skills: [{ id: 'tiandu', name: '天妒', desc: '当你受到1点伤害后，你可以摸一张牌。' }]
-  },
-  caopi: {
-    id: 'caopi', name: '曹丕', title: '霸业的继承者', faction: '魏',
-    avatarClass: 'caopi', maxHp: 3,
-    skills: [
-      { id: 'xingshang', name: '行殇', desc: '当有角色阵亡时，你可以获得弃牌堆中的两张牌。' },
-      { id: 'fangzhu', name: '放逐', desc: '当你受到伤害后，你可以令伤害来源选择：弃置一张手牌，或令你摸一张牌。' }
-    ]
-  },
-  huanggai: {
-    id: 'huanggai', name: '黄盖', title: '轻身为国', faction: '吴',
-    avatarClass: 'huanggai', maxHp: 4,
-    skills: [{ id: 'kurou', name: '苦肉', desc: '出牌阶段，你可以失去1点体力，然后摸两张牌。本回合无限次数。' }]
-  },
-  sunshangxiang: {
-    id: 'sunshangxiang', name: '孙尚香', title: '弓腰姬', faction: '吴',
-    avatarClass: 'sunshangxiang', maxHp: 3,
-    skills: [{ id: 'jieyin', name: '结姻', desc: '出牌阶段，你可以弃置两张手牌，令你和一名其他角色各回复1点体力。每回合限一次。' }]
-  },
-  guanyu: {
-    id: 'guanyu', name: '关羽', title: '美髯公', faction: '蜀',
-    avatarClass: 'guanyu', maxHp: 4,
-    skills: [{ id: 'wusheng', name: '武圣', desc: '你可以将一张红色牌当【杀】使用或打出。（点击红色手牌出杀，或响应时选择红色牌）' }]
-  },
-  zhangfei: {
-    id: 'zhangfei', name: '张飞', title: '万夫不当', faction: '蜀',
-    avatarClass: 'zhangfei', maxHp: 4,
-    skills: [{ id: 'paoxiao', name: '咆哮', desc: '出牌阶段，你使用【杀】无次数限制。' }]
-  }
-};
 
 const CARD_DEFS = [
   { id: 'sha', name: '杀', icon: '⚔️', type: 'sha', category: 'basic' },
