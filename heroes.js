@@ -49,5 +49,20 @@ const HEROES = {
     id: 'zhangfei', name: '张飞', title: '万夫不当', faction: '蜀',
     avatarClass: 'zhangfei', maxHp: 4,
     skills: [{ id: 'paoxiao', name: '咆哮', desc: '出牌阶段，你使用【杀】无次数限制。' }]
+  },
+  zhangjiao: {
+    id: 'zhangjiao', name: '张角', title: '天公将军', faction: '群',
+    avatarClass: 'zhangjiao', maxHp: 3,
+    skills: [{ id: 'leiji', name: '雷击', desc: '当你受到伤害后，你可以进行判定：亮出牌堆顶一张牌，若为♠，伤害来源受到1点伤害。' }]
+  },
+  gongsunzan: {
+    id: 'gongsunzan', name: '公孙瓒', title: '白马将军', faction: '群',
+    avatarClass: 'gongsunzan', maxHp: 4,
+    skills: [{ id: 'yicong', name: '义从', desc: '锁定技。若体力值>2则距离-1；若体力值≤2则其他角色计算与你的距离+1。' }]
+  },
+  huaxiong: {
+    id: 'huaxiong', name: '华雄', title: '西凉猛将', faction: '群',
+    avatarClass: 'huaxiong', maxHp: 6,
+    skills: [{ id: 'shiyong', name: '恃勇', desc: '锁定技。当你受到【杀】造成的伤害后，你获得此【杀】，然后摸一张牌。' }]
   }
 };

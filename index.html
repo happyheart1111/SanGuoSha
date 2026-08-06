@@ -63,6 +63,9 @@ body {
 .hero-avatar.sunshangxiang { background: linear-gradient(135deg, #3a1a2a, #8b3060); color: #f060a0; }
 .hero-avatar.guanyu { background: linear-gradient(135deg, #2a0a0a, #8b1010); color: #ff4040; }
 .hero-avatar.zhangfei { background: linear-gradient(135deg, #1a0a0a, #5a1010); color: #ff2020; }
+.hero-avatar.zhangjiao { background: linear-gradient(135deg, #2a1a3a, #6b30a0); color: #e0a0ff; }
+.hero-avatar.gongsunzan { background: linear-gradient(135deg, #3a3a2a, #8b8b10); color: #f0f040; }
+.hero-avatar.huaxiong { background: linear-gradient(135deg, #3a1a1a, #8b2020); color: #ff8040; }
 .hero-name { font-size: 18px; font-weight: bold; }
 .hero-title { font-size: 11px; color: #a08050; }
 .hero-faction { font-size: 10px; color: #806040; margin-top: 2px; }
@@ -495,6 +498,8 @@ class Game {
     let dist = 1;
     if (to.equipment.plusHorse) dist += 1;
     if (from.equipment.minusHorse) dist -= 1;
+    if (from.hero.id === 'gongsunzan' && from.hp > 2) dist -= 1;
+    if (to.hero.id === 'gongsunzan' && to.hp <= 2) dist += 1;
     return Math.max(1, dist);
   }
 
@@ -884,6 +889,16 @@ class Game {
         this.triggerFangzhu(target, source);
       }
 
+      // 张角雷击
+      if (target.alive && target.hero.id === 'zhangjiao' && source && source !== target && source.alive) {
+        this.triggerLeiji(target, source);
+      }
+
+      // 华雄恃勇
+      if (target.alive && target.hero.id === 'huaxiong' && card && card.type === 'sha') {
+        this.triggerShiyong(target, card);
+      }
+
       if (target.hp <= 0) {
         this.handleDying(target);
         if (!target.alive) break;
@@ -991,6 +1006,53 @@ class Game {
     this.discardCard(source, card);
     this.addLog(`${source.hero.name}弃置了【${card.name}】（曹丕【放逐】）`, 'skill');
     this.render();
+  }
+
+  // 张角雷击
+  triggerLeiji(target, source) {
+    if (target.isHuman && !this.autoPlay) {
+      this.waitingForTarget = { type: 'leiji', target, source };
+    } else {
+      this.doLeiji(target, source);
+    }
+  }
+
+  doLeiji(target, source) {
+    if (!source.alive) return;
+    if (this.deck.length === 0) this.reshuffleDiscard();
+    if (this.deck.length === 0) return;
+    const judgeCard = this.deck.pop();
+    this.addLog(`${target.hero.name}发动【雷击】，判定牌为${judgeCard.suit}【${judgeCard.name}】`, 'skill');
+    this.discardPile.push(judgeCard);
+    if (judgeCard.suit === '♠' && source.alive) {
+      this.addLog(`判定结果为♠，${source.hero.name}受到1点雷电伤害！`, 'damage');
+      source.hp--;
+      this.addLog(`${source.hero.name}受到1点雷电伤害 (剩余HP: ${source.hp}/${source.hero.maxHp})`, 'damage');
+      if (source.hp <= 0) this.handleDying(source);
+      this.checkGameOver();
+    } else {
+      this.addLog(`判定结果不是♠，雷击未触发`, 'skill');
+    }
+  }
+
+  humanLeiji(take) {
+    if (!this.waitingForTarget || this.waitingForTarget.type !== 'leiji') return;
+    const { target, source } = this.waitingForTarget;
+    this.waitingForTarget = null;
+    if (take) {
+      this.doLeiji(target, source);
+    } else {
+      this.addLog(`${target.hero.name}放弃发动【雷击】`);
+    }
+    if (!this.gameOver) this.render();
+  }
+
+  // 华雄恃勇
+  triggerShiyong(target, card) {
+    this.addLog(`${target.hero.name}发动【恃勇】，获得【${card.name}】并摸一张牌`, 'skill');
+    card.ownerId = target.id;
+    target.hand.push(card);
+    this.drawCard(target, 1);
   }
 
   // 行殇：有角色阵亡时曹丕摸牌
@@ -1519,7 +1581,7 @@ class Game {
           else if (wt.type === 'discard_phase') clickable = true;
           else if (wt.type === 'jieyin_discard') clickable = true;
           else if (wt.type === 'fangzhu_discard') clickable = true;
-          else if (['jianxiong', 'tiandu', 'fangzhu_source', 'fangzhu_target'].includes(wt.type)) clickable = false;
+          else if (['jianxiong', 'tiandu', 'fangzhu_source', 'fangzhu_target', 'leiji'].includes(wt.type)) clickable = false;
           else if (wt.type) clickable = false;
         }
 
@@ -1588,6 +1650,11 @@ class Game {
       }
       if (wt.type === 'fangzhu_discard') {
         html += `<span style="color:#ff6060;margin-right:10px;">选择一张手牌弃置（曹丕【放逐】）</span>`;
+      }
+      if (wt.type === 'leiji') {
+        html += `<span style="color:#a040ff;margin-right:10px;">是否发动【雷击】？判定为♠则对${wt.source.hero.name}造成1点伤害</span>`;
+        html += '<button class="btn skill-btn" onclick="game.humanLeiji(true)">发动</button>';
+        html += '<button class="btn" onclick="game.humanLeiji(false)">不发动</button>';
       }
       if (wt.type === 'discard_phase') {
         html += `<span style="color:#ff6060;margin-right:10px;">已选 ${wt.selected.length}/${wt.needDiscard} 张</span>`;
@@ -1785,12 +1852,12 @@ function startGame(heroId) {
 function showHeroSelect() {
   const app = document.getElementById('app');
   const allHeroes = Object.values(HEROES);
-  const factions = { '蜀': [], '魏': [], '吴': [] };
+  const factions = { '蜀': [], '魏': [], '吴': [], '群': [] };
   for (const h of allHeroes) factions[h.faction].push(h);
 
   let heroCardsHtml = '';
   for (const [faction, heroes] of Object.entries(factions)) {
-    const factionColor = faction === '蜀' ? '#f04020' : faction === '魏' ? '#4060f0' : '#40f070';
+    const factionColor = faction === '蜀' ? '#f04020' : faction === '魏' ? '#4060f0' : faction === '吴' ? '#40f070' : '#f0d040';
     heroCardsHtml += `<div style="width:100%;text-align:center;margin-top:15px;"><span style="font-size:14px;color:${factionColor};border-bottom:1px solid ${factionColor};padding:2px 10px;">${faction}势力</span></div>`;
     heroCardsHtml += `<div style="display:flex;gap:18px;flex-wrap:wrap;justify-content:center;margin-top:10px;">`;
     for (const h of heroes) {
