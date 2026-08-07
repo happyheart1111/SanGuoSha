@@ -103,5 +103,21 @@ const HEROES = {
       { id: 'qinyin', name: '琴音', desc: '弃牌阶段结束时，你可以令所有其他角色各选择：弃置一张牌，或摸一张牌。' },
       { id: 'yeyan', name: '业炎', desc: '出牌阶段，你可以弃置3张手牌，对一名角色造成2点火焰伤害。每回合限一次。' }
     ]
+  },
+  jiaxu: {
+    id: 'jiaxu', name: '贾诩', title: '冷酷的毒士', faction: '群',
+    avatarClass: 'jiaxu', maxHp: 3,
+    skills: [
+      { id: 'weimu', name: '帷幕', desc: '锁定技。你不能成为【过河拆桥】【顺手牵羊】【决斗】的目标。' },
+      { id: 'wansha', name: '完杀', desc: '锁定技。你的回合内，其他角色不能使用【桃】。' }
+    ]
+  },
+  'shen-lusu': {
+    id: 'shen-lusu', name: '神·鲁肃', title: '缔盟之贤者', faction: '神',
+    avatarClass: 'shenlusu', maxHp: 3,
+    skills: [
+      { id: 'dimeng', name: '缔盟', desc: '摸牌阶段，你改为摸4张牌。出牌阶段结束时，你可以将1张手牌交给手牌最少的一名角色。' },
+      { id: 'haoshi', name: '好施', desc: '出牌阶段限一次。你可以弃置一张牌，令一名已受伤的角色回复1点体力。' }
+    ]
   }
 };

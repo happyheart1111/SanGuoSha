@@ -183,6 +183,8 @@ body::before {
 .hero-avatar.zhangliao { background: linear-gradient(135deg, #1a1a3a, #3040a0); color: #6080ff; }
 .hero-avatar.shenlvmeng { background: linear-gradient(135deg, #2a1a3a, #6040a0); color: #c080ff; }
 .hero-avatar.shenzhouyu { background: linear-gradient(135deg, #3a1010, #a02020); color: #ffa040; }
+.hero-avatar.jiaxu { background: linear-gradient(135deg, #1a0a1a, #4a2050); color: #d080e0; }
+.hero-avatar.shenlusu { background: linear-gradient(135deg, #1a3a3a, #306060); color: #60e0e0; }
 .hero-name { font-size: 14px; font-weight: bold; line-height: 1.1; }
 .hero-title { font-size: 10px; color: #a08050; line-height: 1.2; }
 .hero-faction { font-size: 9px; color: #806040; margin-top: 2px; }
@@ -552,6 +554,7 @@ class Game {
     this.qingnangUsedThisTurn = false;
     this.yeyanUsedThisTurn = false;
     this.gongxinUsedThisTurn = false;
+    this.haoshiUsedThisTurn = false;
     this.kejiEligible = true;
     this.extraShaChances = 0;
     this.tuxiUsedThisTurn = false;
@@ -1155,6 +1158,7 @@ class Game {
     this.qingnangUsedThisTurn = false;
     this.yeyanUsedThisTurn = false;
     this.gongxinUsedThisTurn = false;
+    this.haoshiUsedThisTurn = false;
     this.kejiEligible = true;
     this.extraShaChances = player.equipment.weapon && player.equipment.weapon.id === 'liannu' ? 999 : 0;
     
@@ -1277,6 +1281,10 @@ class Game {
         this.drawCard(player, 2);
         this.addLog(`${player.hero.name} 没有可突袭的目标，改为摸2张牌`);
       }
+    } else if (player.hero.id === 'shen-lusu') {
+      // 神·鲁肃缔盟：摸4张
+      this.drawCard(player, 4);
+      this.addLog(`${player.hero.name}发动【缔盟】，摸了4张牌`, 'skill');
     } else {
       this.drawCard(player, 2);
       this.addLog(`${player.hero.name} 摸了2张牌`);
@@ -1380,10 +1388,10 @@ class Game {
         const shaRange = this.getShaRange(player);
         return aliveOthers.filter(t => this.calcDistance(player, t, true) <= shaRange);
       }
-      case 'juedou': return aliveOthers;
+      case 'juedou': return aliveOthers.filter(t => t.hero.id !== 'jiaxu');
       case 'huogong': return aliveOthers.filter(t => t.hand.length > 0);
-      case 'shunshou': return aliveOthers.filter(t => this.buildGuoheChoices(t).length > 0 && this.calcDistance(player, t) <= 1);
-      case 'guohe': return aliveOthers.filter(t => this.buildGuoheChoices(t).length > 0);
+      case 'shunshou': return aliveOthers.filter(t => t.hero.id !== 'jiaxu' && this.buildGuoheChoices(t).length > 0 && this.calcDistance(player, t) <= 1);
+      case 'guohe': return aliveOthers.filter(t => t.hero.id !== 'jiaxu' && this.buildGuoheChoices(t).length > 0);
       case 'lebu': return aliveOthers.filter(t => t.judgeArea.length < 3);
       case 'bingliang': return aliveOthers.filter(t => t.judgeArea.length < 3 && this.calcDistance(player, t) <= 1);
       default: return [];
@@ -1723,11 +1731,15 @@ class Game {
 
   humanGuoheDiscard(pickObj) {
     if (!this.waitingForTarget || this.waitingForTarget.type !== 'guohe_discard') return;
-    const { target } = this.waitingForTarget;
+    const { target, source } = this.waitingForTarget;
     this.waitingForTarget = null;
     this.executeGuoheDiscard(target, pickObj);
     this.addLog(`${target.hero.name}的【${pickObj.card.name}】被过河拆桥弃置`);
     this.render();
+    // 如果是 AI 对玩家使用，完成后继续 AI 的出牌阶段
+    if (source && !source.isHuman) {
+      setTimeout(() => this.aiPlayCards(source), 140);
+    }
   }
 
   humanGuoheDiscardEquip(slot) {
@@ -1959,6 +1971,10 @@ class Game {
     const areaName = pickObj.type === 'hand' ? '手牌' : pickObj.type === 'equip' ? '装备' : '判定区';
     this.addLog(`${source.hero.name}顺手牵羊从${target.hero.name}${areaName}获得了【${pickObj.card.name}】`);
     this.render();
+    // 如果是 AI 对玩家使用，完成后继续 AI 的出牌阶段
+    if (source && !source.isHuman) {
+      setTimeout(() => this.aiPlayCards(source), 140);
+    }
   }
 
   humanShunshouStealEquip(slot) {
@@ -2438,6 +2454,15 @@ class Game {
         else { this.showTargetSelection({ name: '攻心', type: 'skill' }, gotargets, (t) => this.doGongxin(player, t)); }
         break;
       }
+      case 'haoshi': {
+        if (this.haoshiUsedThisTurn) { this.addLog('本回合已经使用过【好施】了'); return; }
+        if (player.hand.length === 0) { this.addLog('没有手牌可弃置'); return; }
+        const hatargets = this.players.filter(p => p.alive && p.hp < p.hero.maxHp);
+        if (hatargets.length === 0) { this.addLog('没有需要治疗的受伤角色'); return; }
+        this.waitingForTarget = { type: 'haoshi_select', player, targets: hatargets };
+        this.render();
+        break;
+      }
     }
   }
 
@@ -2467,6 +2492,19 @@ class Game {
     target.hp++;
     this.qingnangUsedThisTurn = true;
     this.addLog(`${player.hero.name}发动【青囊】，弃置【${discardCard.name}】令${target.hero.name}回复1点体力`, 'skill');
+    this.render();
+  }
+
+  humanSelectHaoshiTarget(target) {
+    if (!this.waitingForTarget || this.waitingForTarget.type !== 'haoshi_select') return;
+    const { player } = this.waitingForTarget;
+    this.waitingForTarget = null;
+    // 弃置一张手牌
+    const discardCard = player.hand[0];
+    this.discardCard(player, discardCard);
+    target.hp++;
+    this.haoshiUsedThisTurn = true;
+    this.addLog(`${player.hero.name}发动【好施】，弃置【${discardCard.name}】令${target.hero.name}回复1点体力`, 'skill');
     this.render();
   }
 
@@ -2595,6 +2633,10 @@ class Game {
     if (this._isPvP && player.isHuman) {
       pvpBroadcast(this, 'endPhase', { playerId: player.id, phase: 'discard' });
     }
+    // 神·鲁肃缔盟：出牌阶段结束时，给1张手牌给手牌最少的角色
+    if (player.hero.id === 'shen-lusu' && player.hand.length > 0) {
+      this.triggerDimengGive(player);
+    }
     // 吕蒙克己：没出过杀跳过弃牌
     const kejiSkip = player.hero.id === 'lvmeng' && this.kejiEligible;
     if (kejiSkip) {
@@ -2612,6 +2654,18 @@ class Game {
     this.nextPlayer();
   }
 
+  triggerDimengGive(player) {
+    const others = this.players.filter(p => p.alive && p.id !== player.id);
+    if (others.length === 0) return;
+    let target = others[0];
+    for (const o of others) {
+      if (o.hand.length < target.hand.length) target = o;
+    }
+    const card = player.hand[Math.floor(Math.random() * player.hand.length)];
+    this.transferCard(player, target, card);
+    this.addLog(`${player.hero.name}发动【缔盟】，将【${card.name}】交给了${target.hero.name}`, 'skill');
+  }
+
   humanEndPlayPhase() {
     if (this.phase !== 'play') return;
     this.phase = 'discard';
@@ -2620,6 +2674,10 @@ class Game {
     // PvP 广播
     if (this._isPvP && player.isHuman) {
       pvpBroadcast(this, 'endPhase', { playerId: player.id, phase: 'discard' });
+    }
+    // 神·鲁肃缔盟：出牌阶段结束时给牌
+    if (player.hero.id === 'shen-lusu' && player.hand.length > 0) {
+      this.triggerDimengGive(player);
     }
     // 神周瑜琴音：弃牌阶段结束时触发
     const qinyinPlayer = player.hero.id === 'shen-zhouyu' ? player : null;
@@ -3040,6 +3098,13 @@ class Game {
         }
         html += '<button class="btn" onclick="game.waitingForTarget = null; game.render()">取消</button>';
       }
+      if (wt.type === 'haoshi_select') {
+        html += `<span style="color:#80ff80;margin-right:10px;">【好施】选择治疗目标：</span>`;
+        for (const t of wt.targets) {
+          html += `<button class="btn skill-btn" onclick="game.humanSelectHaoshiTarget(${t.id})">${t.hero.name}(${t.hp}/${t.hero.maxHp})</button>`;
+        }
+        html += '<button class="btn" onclick="game.waitingForTarget = null; game.render()">取消</button>';
+      }
       if (wt.type === 'yeyan_discard') {
         html += `<span style="color:#ffa040;margin-right:10px;">【业炎】选择3张牌弃置（已选${wt.selected.length}/3）：</span>`;
         if (wt.selected.length >= 3) {
@@ -3104,6 +3169,7 @@ class Game {
         huatuo: [{ id: 'qingnang', name: '青囊', cond: !this.qingnangUsedThisTurn && humanPlayer.hand.length > 0 }],
         'shen-zhouyu': [{ id: 'yeyan', name: '业炎', cond: !this.yeyanUsedThisTurn && humanPlayer.hand.length >= 3 }],
         'shen-lvmeng': [{ id: 'gongxin', name: '攻心', cond: !this.gongxinUsedThisTurn }],
+        'shen-lusu': [{ id: 'haoshi', name: '好施', cond: !this.haoshiUsedThisTurn && humanPlayer.hand.length > 0 }],
       };
 
       if (skillDefs[humanHeroId]) {
@@ -3448,8 +3514,152 @@ function showGameModeSelect() {
           <div style="font-size:12px;color:#5090b0;">创建/加入房间 · 双人对战</div>
         </div>
       </div>
+      <div style="margin-top:10px;text-align:center;">
+        <button onclick="showHeroGallery()" style="
+          padding:14px 40px;background:rgba(255,255,255,0.06);color:#c0a060;
+          border:1px solid #6a5530;border-radius:10px;cursor:pointer;font-size:16px;
+          transition:all 0.3s;
+        " onmouseover="this.style.borderColor='#f0d060';this.style.color='#f0d060';this.style.background='rgba(255,255,255,0.1)'"
+           onmouseout="this.style.borderColor='#6a5530';this.style.color='#c0a060';this.style.background='rgba(255,255,255,0.06)'">
+          📜 查看武将
+        </button>
+      </div>
     </div>
   `;
+}
+
+// ==================== 武将图鉴 ====================
+
+function showHeroGallery() {
+  const app = document.getElementById('app');
+  const heroes = Object.values(HEROES);
+  
+  // 按势力分组
+  const factionOrder = ['魏', '蜀', '吴', '群', '神'];
+  const factionColors = {
+    '魏': { bg: 'rgba(30,50,90,0.9)', border: '#4a7ac0', title: '#80b0ff' },
+    '蜀': { bg: 'rgba(60,30,20,0.9)', border: '#c05030', title: '#ff9060' },
+    '吴': { bg: 'rgba(20,50,30,0.9)', border: '#40a050', title: '#60e080' },
+    '群': { bg: 'rgba(50,20,50,0.9)', border: '#a050a0', title: '#d080e0' },
+    '神': { bg: 'rgba(40,20,60,0.9)', border: '#9070d0', title: '#c0a0ff' },
+  };
+  
+  const grouped = {};
+  for (const f of factionOrder) grouped[f] = heroes.filter(h => h.faction === f);
+  
+  let html = `<div style="max-width:1100px;margin:0 auto;padding:20px;">`;
+  html += `<h1 style="text-align:center;color:#f0d060;font-size:32px;margin-bottom:10px;">📜 武将图鉴</h1>`;
+  html += `<div style="text-align:center;margin-bottom:25px;color:#a08050;">共 ${heroes.length} 名武将，点击查看技能详情</div>`;
+  
+  for (const f of factionOrder) {
+    const list = grouped[f];
+    if (list.length === 0) continue;
+    const fc = factionColors[f];
+    
+    html += `<div style="margin-bottom:25px;">`;
+    html += `<h2 style="color:${fc.title};font-size:20px;margin-bottom:12px;border-left:3px solid ${fc.border};padding-left:10px;">${f}</h2>`;
+    html += `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;">`;
+    
+    for (const hero of list) {
+      const avatarColors = {
+        'CaoCao': 'linear-gradient(135deg, #1a2a50, #3040a0)',
+        'sima': 'linear-gradient(135deg, #2a2030, #5040a0)',
+        'caopi': 'linear-gradient(135deg, #1a2a55, #3050b0)',
+        'xiahou': 'linear-gradient(135deg, #2a1530, #603090)',
+        'zhangliao': 'linear-gradient(135deg, #152a30, #2060a0)',
+        'xuchu': 'linear-gradient(135deg, #201a10, #806030)',
+        'zhenji': 'linear-gradient(135deg, #3a1a2a, #8040a0)',
+        'guojia': 'linear-gradient(135deg, #1a2a40, #4060a0)',
+        'liubei': 'linear-gradient(135deg, #302010, #805030)',
+        'guanyu': 'linear-gradient(135deg, #202a10, #508020)',
+        'zhangfei': 'linear-gradient(135deg, #2a2010, #604020)',
+        'zhugeliang': 'linear-gradient(135deg, #1a3020, #306050)',
+        'zhaoyun': 'linear-gradient(135deg, #1a2530, #406080)',
+        'machao': 'linear-gradient(135deg, #2a1a20, #804040)',
+        'huangzhong': 'linear-gradient(135deg, #302010, #806030)',
+        'sunquan': 'linear-gradient(135deg, #102a20, #206050)',
+        'zhouyu': 'linear-gradient(135deg, #2a1515, #903030)',
+        'lvmeng': 'linear-gradient(135deg, #1a2a30, #205070)',
+        'luxun': 'linear-gradient(135deg, #1a3020, #306040)',
+        'ganning': 'linear-gradient(135deg, #2a2015, #906030)',
+        'huanggai': 'linear-gradient(135deg, #302010, #805040)',
+        'daqiao': 'linear-gradient(135deg, #2a2030, #8050a0)',
+        'sunshangxiang': 'linear-gradient(135deg, #3a2020, #a04040)',
+        'huatuo': 'linear-gradient(135deg, #2a3020, #606030)',
+        'lübu': 'linear-gradient(135deg, #301010, #a02020)',
+        'diaochan': 'linear-gradient(135deg, #3a2040, #a04080)',
+        'yuanshao': 'linear-gradient(135deg, #302820, #807040)',
+        'caocao': 'linear-gradient(135deg, #1a2a50, #3040a0)',
+        'shen-zhouyu': 'linear-gradient(135deg, #3a1010, #a02020)',
+        'shen-lvmeng': 'linear-gradient(135deg, #2a1a3a, #6040a0)',
+        'jiaxu': 'linear-gradient(135deg, #1a0a1a, #4a2050)',
+        'shen-lusu': 'linear-gradient(135deg, #1a3a3a, #306060)',
+      };
+      const bg = avatarColors[hero.id] || avatarColors[hero.avatarClass] || 'linear-gradient(135deg, #2a2a3a, #4a4a6a)';
+      
+      html += `<div style="background:${fc.bg};border:1px solid ${fc.border};border-radius:12px;padding:16px;cursor:pointer;transition:all 0.25s;"
+        onmouseover="this.style.transform='translateY(-3px)';this.style.boxShadow='0 6px 20px rgba(0,0,0,0.4)'"
+        onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='none'"
+        onclick="showHeroDetail('${hero.id}')">
+        <div style="display:flex;align-items:center;gap:14px;">
+          <div style="width:56px;height:56px;border-radius:50%;background:${bg};display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:bold;color:#fff;flex-shrink:0;box-shadow:0 2px 8px rgba(0,0,0,0.3);">
+            ${hero.name[0]}
+          </div>
+          <div style="flex:1;">
+            <div style="font-size:17px;font-weight:bold;color:#f0d060;">${hero.name}</div>
+            <div style="font-size:12px;color:#a09080;margin:3px 0;">${hero.title}</div>
+            <div style="font-size:12px;color:#ff8080;">❤ ${hero.maxHp}体力</div>
+          </div>
+        </div>
+        <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap;">
+          ${hero.skills.map(s => `<span style="background:rgba(240,208,96,0.12);color:#f0d060;padding:2px 8px;border-radius:4px;font-size:11px;">${s.name}</span>`).join('')}
+        </div>
+      </div>`;
+    }
+    html += `</div></div>`;
+  }
+  
+  html += `<div style="text-align:center;margin-top:20px;">
+    <button onclick="showGameModeSelect()" style="padding:12px 30px;background:rgba(255,255,255,0.08);color:#c0a060;border:1px solid #6a5530;border-radius:8px;cursor:pointer;font-size:15px;">返回首页</button>
+  </div>`;
+  html += `</div>`;
+  
+  app.innerHTML = html;
+}
+
+function showHeroDetail(heroId) {
+  const hero = HEROES[heroId];
+  if (!hero) return;
+  
+  const factionColors = {
+    '魏': '#80b0ff', '蜀': '#ff9060', '吴': '#60e080', '群': '#d080e0', '神': '#c0a0ff',
+  };
+  
+  const app = document.getElementById('app');
+  let html = `<div style="max-width:600px;margin:40px auto;padding:20px;">`;
+  html += `<div style="background:linear-gradient(180deg,rgba(20,16,10,0.95),rgba(40,30,20,0.95));border:2px solid #8b6914;border-radius:16px;padding:30px;text-align:center;">`;
+  
+  // 头像
+  html += `<div style="width:80px;height:80px;border-radius:50%;background:linear-gradient(135deg,#3a2a1a,#605030);display:inline-flex;align-items:center;justify-content:center;font-size:36px;font-weight:bold;color:#f0d060;margin-bottom:15px;box-shadow:0 4px 16px rgba(0,0,0,0.4);border:2px solid #8b6914;">${hero.name[0]}</div>`;
+  html += `<h2 style="color:#f0d060;font-size:24px;margin:0;">${hero.name}</h2>`;
+  html += `<div style="color:#c0a060;font-size:14px;margin:4px 0;">${hero.title}</div>`;
+  html += `<div style="color:${factionColors[hero.faction] || '#c0a060'};font-size:13px;margin-bottom:15px;">${hero.faction}势力 · ${hero.maxHp}体力</div>`;
+  
+  // 技能
+  html += `<div style="text-align:left;margin-top:20px;">`;
+  html += `<h3 style="color:#e0c080;font-size:16px;border-bottom:1px solid #3a3020;padding-bottom:8px;">技能</h3>`;
+  for (const skill of hero.skills) {
+    html += `<div style="background:rgba(240,208,96,0.06);border-radius:8px;padding:12px 16px;margin-bottom:10px;">`;
+    html += `<div style="color:#f0d060;font-size:15px;font-weight:bold;">${skill.name}</div>`;
+    html += `<div style="color:#b0a080;font-size:13px;margin-top:4px;line-height:1.6;">${skill.desc}</div>`;
+    html += `</div>`;
+  }
+  html += `</div>`;
+  
+  html += `<button onclick="showHeroGallery()" style="margin-top:20px;padding:10px 28px;background:rgba(255,255,255,0.08);color:#c0a060;border:1px solid #6a5530;border-radius:8px;cursor:pointer;font-size:14px;">← 返回武将列表</button>`;
+  html += `</div></div>`;
+  
+  app.innerHTML = html;
 }
 
 // ==================== PvP 联机大厅 ====================

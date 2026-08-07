@@ -15,8 +15,13 @@ function getAISpeed() { return AI_SPEED; }
 
 // AI 摸牌阶段
 Game.prototype.aiDrawPhase = function(player, skipPlay) {
+  // 神·鲁肃缔盟
+  if (player.hero.id === 'shen-lusu') {
+    this.drawCard(player, 4);
+    this.addLog(`${player.hero.name}发动【缔盟】，摸了4张牌`, 'skill');
+  }
   // 张辽突袭 AI
-  if (player.hero.id === 'zhangliao' && !this.tuxiUsedThisTurn) {
+  else if (player.hero.id === 'zhangliao' && !this.tuxiUsedThisTurn) {
     this.tuxiUsedThisTurn = true;
     const others = this.players.filter(p => p.alive && p.id !== player.id && p.hand.length > 0);
     const targets = others.sort(() => Math.random() - 0.5).slice(0, 2);
@@ -48,6 +53,7 @@ Game.prototype.aiDrawPhase = function(player, skipPlay) {
 // AI 出牌阶段入口
 Game.prototype.aiPlayPhase = function(player) {
   if (this.phase !== 'play' || this.gameOver) return;
+  if (this.waitingForTarget) return;
   if (!player.alive) { this.nextPlayer(); return; }
 
   // AI技能
@@ -121,6 +127,17 @@ Game.prototype.aiUseSkills = function(player) {
       this.addLog(`${player.hero.name}发动【青囊】，弃【${card.name}】令${injured.hero.name}回复1点体力`, 'skill');
     }
   }
+  // 神·鲁肃好施
+  if (player.hero.id === 'shen-lusu' && !this.haoshiUsedThisTurn && player.hand.length >= 1) {
+    const injured = this.players.find(p => p.alive && p.hp < p.hero.maxHp);
+    if (injured) {
+      const card = player.hand[0];
+      this.discardCard(player, card);
+      injured.hp++;
+      this.haoshiUsedThisTurn = true;
+      this.addLog(`${player.hero.name}发动【好施】，弃【${card.name}】令${injured.hero.name}回复1点体力`, 'skill');
+    }
+  }
   // 神周瑜业炎
   if (player.hero.id === 'shen-zhouyu' && !this.yeyanUsedThisTurn && player.hand.length >= 3) {
     const enemy = this.players.filter(p => p.alive && p.id !== player.id).sort((a, b) => a.hp - b.hp)[0];
@@ -147,6 +164,7 @@ Game.prototype.aiUseSkills = function(player) {
 // AI 出牌
 Game.prototype.aiPlayCards = function(player) {
   if (this.gameOver) return;
+  if (this.waitingForTarget) return;
   this.render();
 
   // 装备武器/坐骑/防具
@@ -282,7 +300,7 @@ Game.prototype.aiPlayCards = function(player) {
   if (toolIdx >= 0) {
     const card = player.hand[toolIdx];
     const hasEquip = (p) => p.equipment.weapon || p.equipment.armor || p.equipment.plusHorse || p.equipment.minusHorse;
-    const targets = this.players.filter(p => p.alive && p.id !== player.id && (p.hand.length > 0 || (card.type === 'guohe' && (hasEquip(p) || p.judgeArea.length > 0))));
+    const targets = this.players.filter(p => p.alive && p.id !== player.id && p.hero.id !== 'jiaxu' && (p.hand.length > 0 || (card.type === 'guohe' && (hasEquip(p) || p.judgeArea.length > 0))));
     if (targets.length > 0) {
       const target = targets.reduce((a, b) => a.hp >= b.hp ? a : b);
       this.discardCard(player, card);
@@ -298,7 +316,7 @@ Game.prototype.aiPlayCards = function(player) {
   const juedouIdx = player.hand.findIndex(c => c.type === 'juedou');
   if (juedouIdx >= 0) {
     const card = player.hand[juedouIdx];
-    const targets = this.players.filter(p => p.alive && p.id !== player.id);
+    const targets = this.players.filter(p => p.alive && p.id !== player.id && p.hero.id !== 'jiaxu');
     if (targets.length > 0) {
       const target = targets.reduce((a, b) => a.hand.length <= b.hand.length ? a : b);
       this.discardCard(player, card);
