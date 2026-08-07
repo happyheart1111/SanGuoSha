@@ -626,14 +626,31 @@ class Game {
     this.startCurrentTurn();
   }
 
-  // 随机分配座位号（所有玩家随机入座），然后按座位号排序保证出牌顺序正确
+  // 分配座位号：主公固定1号位（seat 0），其余玩家随机分配 2~N 号位
+  // 非身份局则全部随机
   assignSeats() {
     const n = this.players.length;
-    const seats = [];
-    for (let s = 0; s < n; s++) seats.push(s);
-    this.shuffle(seats);
-    for (let i = 0; i < n; i++) {
-      this.players[i].seat = seats[i];
+    const zhugongIdx = this.players.findIndex(p => p.role === 'zhugong');
+    if (zhugongIdx >= 0) {
+      // 身份局：主公固定1号位
+      this.players[zhugongIdx].seat = 0;
+      const otherSeats = [];
+      for (let s = 1; s < n; s++) otherSeats.push(s);
+      this.shuffle(otherSeats);
+      let si = 0;
+      for (let i = 0; i < n; i++) {
+        if (this.players[i].seat !== 0) {
+          this.players[i].seat = otherSeats[si++];
+        }
+      }
+    } else {
+      // 非身份局：全部随机
+      const seats = [];
+      for (let s = 0; s < n; s++) seats.push(s);
+      this.shuffle(seats);
+      for (let i = 0; i < n; i++) {
+        this.players[i].seat = seats[i];
+      }
     }
     // 按座位号排序，使 currentPlayerIdx 递增 = 按座位号顺序出牌
     this.players.sort((a, b) => a.seat - b.seat);
@@ -1409,7 +1426,7 @@ class Game {
       }
 
       if (target.hp <= 0) {
-        this.handleDying(target);
+        this.handleDying(target, source);
         if (!target.alive) break;
       }
     }
@@ -1419,12 +1436,12 @@ class Game {
       if (wid === 'zhuque') {
         target.hp--;
         this.addLog(`【朱雀羽扇】额外造成1点伤害 (剩余HP: ${target.hp}/${target.hero.maxHp})`, 'damage');
-        if (target.hp <= 0) { this.handleDying(target); }
+        if (target.hp <= 0) { this.handleDying(target, source); }
       }
       if (wid === 'guding' && target.hand.length === 0) {
         target.hp--;
         this.addLog(`【古锭刀】对空手角色额外造成1点伤害 (剩余HP: ${target.hp}/${target.hero.maxHp})`, 'damage');
-        if (target.hp <= 0) { this.handleDying(target); }
+        if (target.hp <= 0) { this.handleDying(target, source); }
       }
       if (wid === 'qilin' && target.equipment.plusHorse) {
         const horse = target.equipment.plusHorse;
@@ -1586,7 +1603,7 @@ class Game {
     this.addLog(`${caopiPlayer.hero.name}发动【行殇】，从弃牌堆获得${count}张牌`, 'skill');
   }
 
-  handleDying(player) {
+  handleDying(player, source) {
     this.addLog(`${player.hero.name}处于濒死状态，需要打出【桃】`, 'damage');
 
     // 华佗急救：红色牌可当桃
@@ -1595,24 +1612,41 @@ class Game {
 
     if (player.isHuman && !this.autoPlay) {
       if (hasTao || huatuoJijiu) {
-        this.waitingForTarget = { type: 'dying', player, huatuoJijiu };
+        this.waitingForTarget = { type: 'dying', player, huatuoJijiu, source };
         return;
       }
     } else {
       if (this.aiHandleDying(player)) return;
     }
 
-    this.killPlayer(player);
+    this.killPlayer(player, source);
     this.checkGameOver();
   }
 
-  killPlayer(player) {
+  killPlayer(player, source) {
     player.alive = false;
     this.addLog(`${player.hero.name}阵亡！`, 'important');
     if (player.role && !this.rolesRevealed[player.id]) {
       this.rolesRevealed[player.id] = true;
       this.addLog(`${player.hero.name}的身份是：${getRoleDisplayName(player.role)}`, 'important');
     }
+
+    // 杀死反贼奖励：摸3张牌
+    if (player.role === 'fanzei' && source && source.alive) {
+      this.drawCard(source, 3);
+      this.addLog(`${source.hero.name}杀死反贼，摸3张牌奖励！`, 'reward');
+    }
+    // 主公杀死忠臣惩罚：弃掉所有手牌和装备
+    if (player.role === 'zhongchen' && source && source.role === 'zhugong' && source.alive) {
+      this.addLog(`主公误杀忠臣！${source.hero.name}弃掉所有手牌和装备`, 'penalty');
+      const allCards = [...source.hand, ...Object.values(source.equipment).filter(Boolean)];
+      for (const c of allCards) {
+        this.discardPile.push(c);
+      }
+      source.hand = [];
+      source.equipment = { weapon: null, armor: null, plusHorse: null, minusHorse: null };
+    }
+
     const caopi = this.players.find(p => p.hero.id === 'caopi' && p.alive);
     if (caopi) this.triggerXingshang(caopi);
   }
@@ -1620,6 +1654,7 @@ class Game {
   humanDyingUseTao(withCard) {
     if (!this.waitingForTarget || this.waitingForTarget.type !== 'dying') return;
     const player = this.waitingForTarget.player;
+    const source = this.waitingForTarget.source;
     this.waitingForTarget = null;
     if (withCard) {
       const isJijiu = player.hero.id === 'huatuo' && withCard.type !== 'tao';
@@ -1627,7 +1662,7 @@ class Game {
       player.hp = 1;
       this.addLog(`${player.hero.name}${isJijiu ? '发动【急救】将红色牌当【桃】' : '使用【桃】'}自救，回复至1点体力`, isJijiu ? 'skill' : 'heal');
     } else {
-      this.killPlayer(player);
+      this.killPlayer(player, source);
     }
     this.checkGameOver();
     this.render();
@@ -2650,6 +2685,17 @@ function startHeroPick(gameMode) {
     roles = rolePool;
     lordIdx = rolePool.indexOf('zhugong');
 
+    // 主公多一个候选武将名额（4选1）
+    if (lordIdx >= 0) {
+      const heroPool = [...allHeroIds];
+      for (let k = heroPool.length - 1; k > 0; k--) {
+        const j = Math.floor(Math.random() * (k + 1));
+        [heroPool[k], heroPool[j]] = [heroPool[j], heroPool[k]];
+      }
+      const extraHero = heroPool.find(h => !choices[lordIdx].includes(h));
+      if (extraHero) choices[lordIdx].push(extraHero);
+    }
+
     // 主公是AI：自动选将（优先选体力最高的）
     if (lordIdx > 0) {
       const lordChoices = [...choices[lordIdx]];
@@ -2692,29 +2738,30 @@ function showHumanHeroPick(heroChoices, gameMode, lordHero, lordIdx) {
   if (lordIdx === 0) {
     // 人类是主公
     lordInfoHtml = `<div style="background:rgba(240,208,96,0.12);border:2px solid #f0d060;border-radius:14px;padding:16px 28px;text-align:center;margin-bottom:8px;">
-      <div style="font-size:18px;color:#f0d060;font-weight:bold;">👑 你是主公</div>
-      <div style="font-size:12px;color:#c0a060;margin-top:4px;">主公身份公开，请谨慎选将</div>
+      <div style="font-size:18px;color:#f0d060;font-weight:bold;">👑 你是主公（一号位）</div>
+      <div style="font-size:12px;color:#c0a060;margin-top:4px;">主公身份公开，体力上限+1，可从4名武将中选将</div>
     </div>`;
   } else if (lordHero && lordIdx > 0) {
     // AI是主公，展示其已选武将
     const lh = HEROES[lordHero];
     lordInfoHtml = `<div style="background:rgba(240,208,96,0.12);border:2px solid #f0d060;border-radius:14px;padding:16px 28px;text-align:center;margin-bottom:8px;">
-      <div style="font-size:16px;color:#f0d060;font-weight:bold;">👑 主公已选择</div>
+      <div style="font-size:16px;color:#f0d060;font-weight:bold;">👑 主公已选择（一号位）</div>
       <div style="display:flex;align-items:center;justify-content:center;gap:14px;margin-top:10px;">
         <div class="hero-avatar ${lh.avatarClass}" style="width:52px;height:52px;font-size:24px;margin:0;">${lh.name[0]}</div>
         <div style="text-align:left;">
           <div style="font-size:19px;font-weight:bold;color:#f0d060;">${lh.name}</div>
-          <div style="font-size:12px;color:#c0a060;">${lh.title} · ${'❤️'.repeat(lh.maxHp)}</div>
+          <div style="font-size:12px;color:#c0a060;">${lh.title} · 体力上限+1: ${'❤️'.repeat(lh.maxHp + 1)}</div>
         </div>
       </div>
     </div>`;
   }
 
+  const pickCount = heroChoices.length;
   const modeNames = { 1: '1v1 混战模式', 5: '五人身份局', 8: '八人身份局' };
   app.innerHTML = `
     <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;gap:25px;padding:20px;">
       <h1 style="font-size:30px;color:#f0d060;text-shadow:0 0 20px rgba(240,208,96,0.5);">🎯 选择武将</h1>
-      <p style="color:#c0a060;font-size:15px;">${modeNames[gameMode] || gameMode + '人局'} — 从3名武将中选择一位</p>
+      <p style="color:#c0a060;font-size:15px;">${modeNames[gameMode] || gameMode + '人局'} — 从${pickCount}名武将中选择一位</p>
       ${lordInfoHtml}
       <div style="display:flex;gap:25px;flex-wrap:wrap;justify-content:center;">
         ${cardsHtml}
