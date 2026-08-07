@@ -265,6 +265,7 @@ body {
 
 <script src="heroes.js"></script>
 <script src="cards.js"></script>
+<script src="roles.js"></script>
 <script>
 // ==================== 游戏引擎 ====================
 
@@ -287,11 +288,91 @@ class Game {
     this.pendingDamageCards = {};
     this.autoPlay = false; // 托管状态
     this.autoPlayTimer = null;
+    this.gameMode = 1;       // 1=1v1, 5=五人, 8=八人
+    this.rolesRevealed = {}; // 已公开身份
+    this.winningTeam = null;
+    this.skillModalHero = null;
+    this.heroSelectPhase = null;
+    this.heroIdList = null; // 所有玩家的英雄ID列表
   }
 
-  init(humanHeroId) {
+  init(gameMode, heroIds) {
+    // gameMode: 数字参数；heroIds: [heroId1, heroId2, ...]
+    // 兼容旧接口：如果 heroIds 不存在，则 humanHeroId = gameMode，使用旧的1v1逻辑
+    if (!Array.isArray(heroIds)) {
+      return this.initOld(gameMode);
+    }
+    this.gameMode = gameMode;
+    this.humanPlayerId = heroIds[0]; // 人类玩家总是第0位
+    this.heroIdList = [...heroIds];
+    this.rolesRevealed = {};
+    this.winningTeam = null;
+
+    // 创建玩家
+    this.players = heroIds.map((hId, i) => ({
+      id: i,
+      hero: HEROES[hId],
+      hp: HEROES[hId].maxHp,
+      hand: [],
+      equipment: { weapon: null, armor: null, plusHorse: null, minusHorse: null },
+      isHuman: i === 0,
+      alive: true,
+      role: null,
+    }));
+
+    // 5人或8人模式：分配身份
+    if (gameMode >= 5) {
+      const rolePool = buildRolePool(gameMode);
+      this.shuffle(rolePool);
+      this.players.forEach((p, i) => { p.role = rolePool[i]; });
+      const humanRole = this.players[0].role;
+      this.addLog(`你的身份：${getRoleDisplayName(humanRole)}`, 'important');
+    }
+
+    this.initDeck();
+    this.dealInitialCards();
+
+    // 主公加成：多摸一张 + 体力上限+1
+    if (gameMode >= 5) {
+      const zhugong = this.players.find(p => p.role === 'zhugong');
+      if (zhugong) {
+        this.drawCard(zhugong);
+        zhugong.hp += 1;
+        zhugong.hero = {...zhugong.hero, maxHp: zhugong.hero.maxHp + 1};
+        this.addLog(`${zhugong.hero.name}（主公）体力上限+1，额外获得一张手牌`);
+      }
+    }
+
+    // 主公先行动
+    this.currentPlayerIdx = gameMode >= 5 ? this.players.findIndex(p => p.role === 'zhugong') : 0;
+    if (this.currentPlayerIdx < 0) this.currentPlayerIdx = 0;
+    this.phase = 'draw';
+    this.selectedCardIdx = -1;
+    this.waitingForTarget = null;
+    this.gameOver = false;
+    this.aiThinking = false;
+    this.autoPlay = false;
+    this.shaUsedThisTurn = false;
+    this.zhihengUsedThisTurn = false;
+    this.jieyinUsedThisTurn = false;
+    this.logEntries = [];
+    this.addLog(`====== ${getGameModeName(gameMode)} 开始 ======`, 'important');
+    const humanHero = HEROES[heroIds[0]];
+    this.addLog(`你扮演【${humanHero.name}】`);
+    if (gameMode >= 5) {
+      this.addLog(`${getRoleSummary(this.players[0].role)}`, 'important');
+    } else {
+      const otherNames = heroIds.slice(1).map(id => '【' + HEROES[id].name + '】').join('、');
+      this.addLog(`对手：${otherNames}`);
+    }
+    this.startCurrentTurn();
+  }
+
+  initOld(humanHeroId) {
+    this.gameMode = 1;
     this.humanPlayerId = humanHeroId;
-    // 从剩余英雄中随机选2个作为AI对手
+    this.heroIdList = [humanHeroId];
+    this.rolesRevealed = {};
     const otherHeroIds = Object.keys(HEROES).filter(id => id !== humanHeroId);
     this.shuffle(otherHeroIds);
     const aiHeroIds = otherHeroIds.slice(0, 2);
@@ -306,6 +387,7 @@ class Game {
       equipment: { weapon: null, armor: null, plusHorse: null, minusHorse: null },
       isHuman: id === humanHeroId,
       alive: true,
+      role: null,
     }));
     this.initDeck();
     this.dealInitialCards();
@@ -1229,6 +1311,10 @@ class Game {
     const dyingId = player.id;
     player.alive = false;
     this.addLog(`${player.hero.name}阵亡！`, 'important');
+    if (player.role && !this.rolesRevealed[player.id]) {
+      this.rolesRevealed[player.id] = true;
+      this.addLog(`${player.hero.name}的身份是：${getRoleDisplayName(player.role)}`, 'important');
+    }
 
     // 曹丕行殇
     const caopi = this.players.find(p => p.hero.id === 'caopi' && p.alive);
@@ -1249,6 +1335,10 @@ class Game {
       const dyingId = player.id;
       player.alive = false;
       this.addLog(`${player.hero.name}阵亡！`, 'important');
+      if (player.role && !this.rolesRevealed[player.id]) {
+        this.rolesRevealed[player.id] = true;
+        this.addLog(`${player.hero.name}的身份是：${getRoleDisplayName(player.role)}`, 'important');
+      }
       const caopi = this.players.find(p => p.hero.id === 'caopi' && p.alive);
       if (caopi) this.triggerXingshang(caopi);
     }
@@ -1639,16 +1729,41 @@ class Game {
   }
 
   checkGameOver() {
+    if (this.gameOver) return;
     const alive = this.players.filter(p => p.alive);
-    if (alive.length <= 1) {
+    let result = null;
+    if (this.gameMode >= 5) {
+      // 身份局胜负判定
+      const zhugong = this.players.find(p => p.role === 'zhugong');
+      const aliveFanzei = alive.filter(p => p.role === 'fanzei');
+      const aliveNeijian = alive.filter(p => p.role === 'neijian');
+      const aliveZhongchen = alive.filter(p => p.role === 'zhongchen');
+
+      if (zhugong && !zhugong.alive) {
+        result = { team: 'fanzei', winners: alive.filter(p => p.role === 'fanzei'), msg: '主公已阵亡，反贼获胜！' };
+      } else if (aliveFanzei.length === 0 && aliveNeijian.length === 0) {
+        result = { team: 'zhugong', winners: alive.filter(p => p.role === 'zhugong' || p.role === 'zhongchen'), msg: '反贼与内奸已全部消灭，主公忠臣获胜！' };
+      } else if (alive.length === 1 && alive[0].role === 'neijian') {
+        result = { team: 'neijian', winners: [alive[0]], msg: '内奸成为最后的幸存者，内奸获胜！' };
+      }
+    } else {
+      if (alive.length <= 1) {
+        result = { team: 'free', winners: alive, msg: `${alive[0] ? alive[0].hero.name : '无人'} 获得了胜利！` };
+      }
+    }
+
+    if (result) {
       this.gameOver = true;
       this.phase = 'idle';
-      const winner = alive[0];
-      const isHumanWin = winner && winner.isHuman;
+      this.winningTeam = result.team + '';
       this.addLog('====================================', 'important');
-      this.addLog(`${winner ? winner.hero.name : '无人'} 获得了胜利！`, 'important');
-      if (isHumanWin) this.addLog('恭喜你赢得了比赛！', 'important');
+      this.addLog(result.msg, 'important');
+      const humanP = this.players.find(p => p.isHuman);
+      const humanWin = result.winners.some(w => w.id === humanP.id);
+      if (humanWin) this.addLog('恭喜你赢得了比赛！', 'important');
       else this.addLog('你输了…再接再厉！', 'damage');
+      // 揭示所有身份
+      this.players.forEach(p => { this.rolesRevealed[p.id] = true; });
       this.autoPlay = false;
       this.render();
     }
@@ -1674,7 +1789,12 @@ class Game {
     html += `
     <div class="top-bar">
       <h1>🏯 三国杀</h1>
-      <div class="game-info">回合: ${player ? player.hero.name : ''} ${isAutoTurn ? '<span style="color:#60ff80;">[托管中]</span>' : ''}</div>
+      <div class="game-info">
+        ${this.gameMode >= 5 ? getGameModeName(this.gameMode) + ' · ' : ''}
+        回合: ${player ? player.hero.name : ''}
+        ${this.gameMode >= 5 && humanPlayer.role ? ` · 你的身份: ${getRoleDisplayName(humanPlayer.role)}` : ''}
+        ${isAutoTurn ? ' <span style="color:#60ff80;">[托管中]</span>' : ''}
+      </div>
       <div class="deck-info">
         <span class="deck-count">牌堆: ${this.deck.length} | 弃牌: ${this.discardPile.length}</span>
         <div class="deck-visual">牌<br>堆</div>
@@ -1873,14 +1993,35 @@ class Game {
 
     // 游戏结束弹窗
     if (this.gameOver) {
-      const alive = this.players.filter(p => p.alive);
-      const isHumanWin = alive.length > 0 && alive[0].isHuman;
+      const hu = this.players.find(p => p.isHuman);
+      let isWin, resultMsg;
+      if (this.gameMode >= 5) {
+        const humanWin = (this.winningTeam === 'zhugong' && (hu.role === 'zhugong' || hu.role === 'zhongchen'))
+                       || (this.winningTeam === 'fanzei' && hu.role === 'fanzei')
+                       || (this.winningTeam === 'neijian' && hu.role === 'neijian');
+        isWin = humanWin;
+        const teamNames = { zhugong: '主公&忠臣', fanzei: '反贼', neijian: '内奸', free: '自由' };
+        resultMsg = `获胜阵营：${teamNames[this.winningTeam] || '未知'}`;
+      } else {
+        const alive = this.players.filter(p => p.alive);
+        isWin = alive.length > 0 && alive[0].isHuman;
+        resultMsg = alive.length > 0 ? alive[0].hero.name + ' 获得了最终胜利！' : '全员阵亡！';
+      }
       html += `
       <div class="modal">
         <div class="modal-content">
-          <h2>${isHumanWin ? '🎉 胜利！' : '💀 失败…'}</h2>
-          <p>${alive.length > 0 ? alive[0].hero.name + ' 获得了最终胜利！' : '全员阵亡！'}</p>
-          <button class="btn" onclick="game.restart()" style="margin:5px;">再来一局（同一武将）</button>
+          <h2>${isWin ? '🎉 胜利！' : '💀 失败…'}</h2>
+          <p>${resultMsg}</p>`;
+      // 显示所有玩家身份
+      if (this.gameMode >= 5) {
+        html += '<div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin:10px 0;">';
+        for (const p of this.players) {
+          const r = ROLES[p.role];
+          html += `<div style="font-size:12px;color:${r.color};background:rgba(0,0,0,0.3);padding:4px 10px;border-radius:6px;">${p.hero.name} ${r.icon}${r.name}${!p.alive ? ' (已阵亡)' : ''}</div>`;
+        }
+        html += '</div>';
+      }
+      html += `<button class="btn" onclick="game.restart()" style="margin:5px;">再来一局（同一武将）</button>
           <button class="btn" onclick="showHeroSelect()" style="margin:5px;">选择新武将</button>
         </div>
       </div>`;
@@ -1918,7 +2059,16 @@ class Game {
     let html = `<div class="${classes}">`;
     html += '<div class="hero-header">';
     html += `<div class="hero-avatar ${player.hero.avatarClass}">${player.hero.name[0]}</div>`;
-    html += `<div><div class="hero-name">${player.hero.name}</div><div class="hero-title">${player.hero.title}</div><div class="hero-faction">${player.hero.faction}</div></div>`;
+    html += `<div><div class="hero-name">${player.hero.name}</div><div class="hero-title">${player.hero.title}</div><div class="hero-faction">${player.hero.faction}</div>`;
+    // 显示身份：人类玩家始终可见，其他人死亡后公开
+    if (this.gameMode >= 5 && player.role) {
+      const showRole = player.isHuman || this.rolesRevealed[player.id] || this.gameOver;
+      const roleInfo = ROLES[player.role];
+      html += `<div style="font-size:10px;color:${roleInfo.color};margin-top:2px;">`;
+      html += showRole ? `${roleInfo.icon} ${roleInfo.name}` : `❓ 未知`;
+      html += '</div>';
+    }
+    html += '</div>';
     html += '</div>';
 
     html += '<div class="hp-bar"><div class="hp-dots">';
@@ -2044,7 +2194,11 @@ class Game {
   }
 
   restart() {
-    this.init(this.humanPlayerId);
+    if (this.gameMode >= 5 && this.heroIdList) {
+      this.init(this.gameMode, this.heroIdList);
+    } else {
+      this.init(this.humanPlayerId);
+    }
   }
 }
 
@@ -2060,44 +2214,146 @@ function startGame(heroId) {
   game.render();
 }
 
+// ==================== 模式选择 ====================
+
 function showHeroSelect() {
+  showGameModeSelect();
+}
+
+function showGameModeSelect() {
   const app = document.getElementById('app');
-  const allHeroes = Object.values(HEROES);
-  const factions = { '蜀': [], '魏': [], '吴': [], '群': [] };
-  for (const h of allHeroes) factions[h.faction].push(h);
-
-  let heroCardsHtml = '';
-  for (const [faction, heroes] of Object.entries(factions)) {
-    const factionColor = faction === '蜀' ? '#f04020' : faction === '魏' ? '#4060f0' : faction === '吴' ? '#40f070' : '#f0d040';
-    heroCardsHtml += `<div style="width:100%;text-align:center;margin-top:15px;"><span style="font-size:14px;color:${factionColor};border-bottom:1px solid ${factionColor};padding:2px 10px;">${faction}势力</span></div>`;
-    heroCardsHtml += `<div style="display:flex;gap:18px;flex-wrap:wrap;justify-content:center;margin-top:10px;">`;
-    for (const h of heroes) {
-      heroCardsHtml += `
-      <div onclick="startGame('${h.id}')" style="
-        width:170px;padding:18px;background:linear-gradient(180deg,rgba(30,15,5,0.9),rgba(50,25,10,0.95));
-        border:2px solid #8b6914;border-radius:14px;cursor:pointer;text-align:center;
-        transition:all 0.3s;
-      " onmouseover="this.style.transform='scale(1.05)';this.style.borderColor='#f0d060';this.style.boxShadow='0 0 25px rgba(240,208,96,0.3)'"
-         onmouseout="this.style.transform='scale(1)';this.style.borderColor='#8b6914';this.style.boxShadow='none'">
-        <div class="hero-avatar ${h.avatarClass}" style="margin:0 auto 10px;width:65px;height:65px;font-size:30px;">${h.name[0]}</div>
-        <div style="font-size:18px;font-weight:bold;margin-bottom:2px;">${h.name}</div>
-        <div style="font-size:11px;color:#a08050;margin-bottom:6px;">${h.title}</div>
-        <div style="font-size:10px;color:#a08050;">体力: ${'❤️'.repeat(h.maxHp)}</div>
-        <div style="font-size:10px;color:#b09030;margin-top:6px;display:flex;gap:4px;justify-content:center;flex-wrap:wrap;">
-          ${h.skills.map(s => `<span style="background:rgba(139,105,20,0.3);border:1px solid #8b6914;border-radius:3px;padding:1px 6px;">${s.name}: ${s.desc.slice(0,15)}…</span>`).join('')}
-        </div>
-      </div>`;
-    }
-    heroCardsHtml += '</div>';
-  }
-
   app.innerHTML = `
-    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;gap:20px;padding:20px;">
-      <h1 style="font-size:36px;color:#f0d060;text-shadow:0 0 20px rgba(240,208,96,0.5);letter-spacing:8px;">🏯 三国杀</h1>
-      <p style="color:#c0a060;font-size:15px;">选择你的武将（1v2 混战模式）</p>
-      ${heroCardsHtml}
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;gap:30px;padding:20px;">
+      <h1 style="font-size:40px;color:#f0d060;text-shadow:0 0 20px rgba(240,208,96,0.5);letter-spacing:8px;">🏯 三国杀</h1>
+      <p style="color:#c0a060;font-size:16px;">选择游戏模式</p>
+      <div style="display:flex;gap:20px;flex-wrap:wrap;justify-content:center;">
+        <div onclick="startHeroPick(1)" style="
+          width:200px;padding:30px;background:linear-gradient(180deg,rgba(30,15,5,0.9),rgba(50,25,10,0.95));
+          border:2px solid #8b6914;border-radius:16px;cursor:pointer;text-align:center;
+          transition:all 0.3s;
+        " onmouseover="this.style.transform='scale(1.05)';this.style.borderColor='#f0d060';this.style.boxShadow='0 0 25px rgba(240,208,96,0.3)'"
+           onmouseout="this.style.transform='scale(1)';this.style.borderColor='#8b6914';this.style.boxShadow='none'">
+          <div style="font-size:48px;">⚔️</div>
+          <div style="font-size:20px;font-weight:bold;margin:12px 0;color:#f0d060;">1v1 混战</div>
+          <div style="font-size:12px;color:#a08050;">你 + 2名AI · 自由对战</div>
+        </div>
+        <div onclick="startHeroPick(5)" style="
+          width:200px;padding:30px;background:linear-gradient(180deg,rgba(30,15,5,0.9),rgba(50,25,10,0.95));
+          border:2px solid #8b6914;border-radius:16px;cursor:pointer;text-align:center;
+          transition:all 0.3s;
+        " onmouseover="this.style.transform='scale(1.05)';this.style.borderColor='#f0d060';this.style.boxShadow='0 0 25px rgba(240,208,96,0.3)'"
+           onmouseout="this.style.transform='scale(1)';this.style.borderColor='#8b6914';this.style.boxShadow='none'">
+          <div style="font-size:48px;">👑</div>
+          <div style="font-size:20px;font-weight:bold;margin:12px 0;color:#f0d060;">五人身份局</div>
+          <div style="font-size:12px;color:#a08050;">1主1忠2反1内 · 身份隐藏</div>
+        </div>
+        <div onclick="startHeroPick(8)" style="
+          width:200px;padding:30px;background:linear-gradient(180deg,rgba(30,15,5,0.9),rgba(50,25,10,0.95));
+          border:2px solid #8b6914;border-radius:16px;cursor:pointer;text-align:center;
+          transition:all 0.3s;
+        " onmouseover="this.style.transform='scale(1.05)';this.style.borderColor='#f0d060';this.style.boxShadow='0 0 25px rgba(240,208,96,0.3)'"
+           onmouseout="this.style.transform='scale(1)';this.style.borderColor='#8b6914';this.style.boxShadow='none'">
+          <div style="font-size:48px;">🏰</div>
+          <div style="font-size:20px;font-weight:bold;margin:12px 0;color:#f0d060;">八人身份局</div>
+          <div style="font-size:12px;color:#a08050;">1主2忠4反1内 · 身份隐藏</div>
+        </div>
+      </div>
     </div>
   `;
+}
+
+// ==================== 选将系统 ====================
+
+let heroPickState = null;
+
+function startHeroPick(gameMode) {
+  const totalPlayers = gameMode === 1 ? 3 : gameMode;
+  const allHeroIds = Object.keys(HEROES);
+  const shuffled = [...allHeroIds];
+  // 简单洗牌
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+
+  // 为每个玩家随机分配3个候选英雄（不重复）
+  const pool = [...allHeroIds];
+  const choices = [];
+  for (let i = 0; i < totalPlayers; i++) {
+    // 洗牌取3个
+    for (let k = pool.length - 1; k > 0; k--) {
+      const j = Math.floor(Math.random() * (k + 1));
+      [pool[k], pool[j]] = [pool[j], pool[k]];
+    }
+    choices.push(pool.slice(0, 3));
+  }
+
+  heroPickState = { gameMode, choices, picked: new Array(totalPlayers).fill(null), totalPlayers };
+  showHumanHeroPick(choices[0], gameMode);
+}
+
+function showHumanHeroPick(heroChoices, gameMode) {
+  const app = document.getElementById('app');
+  let cardsHtml = '';
+  heroChoices.forEach(hId => {
+    const h = HEROES[hId];
+    cardsHtml += `
+    <div onclick="confirmHeroPick('${h.id}')" style="
+      width:180px;padding:20px;background:linear-gradient(180deg,rgba(30,15,5,0.95),rgba(50,25,10,0.95));
+      border:2px solid #8b6914;border-radius:14px;cursor:pointer;text-align:center;
+      transition:all 0.3s;
+    " onmouseover="this.style.transform='scale(1.08)';this.style.borderColor='#f0d060';this.style.boxShadow='0 0 30px rgba(240,208,96,0.4)'"
+       onmouseout="this.style.transform='scale(1)';this.style.borderColor='#8b6914';this.style.boxShadow='none'">
+      <div class="hero-avatar ${h.avatarClass}" style="margin:0 auto 10px;width:70px;height:70px;font-size:32px;">${h.name[0]}</div>
+      <div style="font-size:20px;font-weight:bold;margin-bottom:3px;">${h.name}</div>
+      <div style="font-size:11px;color:#a08050;margin-bottom:8px;">${h.title} · ${h.faction}</div>
+      <div style="font-size:11px;color:#a08050;margin-bottom:8px;">体力: ${'❤️'.repeat(h.maxHp)}</div>
+      <div style="font-size:10px;color:#b09030;display:flex;gap:3px;justify-content:center;flex-wrap:wrap;">
+        ${h.skills.map(s => `<span style="background:rgba(139,105,20,0.3);border:1px solid #8b6914;border-radius:3px;padding:2px 6px;">${s.name}</span>`).join('')}
+      </div>
+    </div>`;
+  });
+
+  const modeNames = { 1: '1v1 混战模式', 5: '五人身份局', 8: '八人身份局' };
+  app.innerHTML = `
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;gap:25px;padding:20px;">
+      <h1 style="font-size:30px;color:#f0d060;text-shadow:0 0 20px rgba(240,208,96,0.5);">🎯 选择武将</h1>
+      <p style="color:#c0a060;font-size:15px;">${modeNames[gameMode] || gameMode + '人局'} — 从3名武将中选择一位</p>
+      <div style="display:flex;gap:25px;flex-wrap:wrap;justify-content:center;">
+        ${cardsHtml}
+      </div>
+      <p style="color:#806040;font-size:12px;">点击武将卡片确认选择</p>
+    </div>
+  `;
+}
+
+function confirmHeroPick(heroId) {
+  if (!heroPickState) return;
+  heroPickState.picked[0] = heroId;
+
+  // AI自动选将：选体力最高的
+  const pickedHeroIds = [heroId];
+  for (let i = 1; i < heroPickState.totalPlayers; i++) {
+    const choices = heroPickState.choices[i].filter(h => !pickedHeroIds.includes(h));
+    if (choices.length > 0) {
+      // AI 优先选高体力
+      choices.sort((a, b) => HEROES[b].maxHp - HEROES[a].maxHp);
+      pickedHeroIds.push(choices[0]);
+    } else {
+      // 候选都被选了，随机选一个
+      const remaining = Object.keys(HEROES).filter(h => !pickedHeroIds.includes(h));
+      pickedHeroIds.push(remaining[Math.floor(Math.random() * remaining.length)]);
+    }
+    heroPickState.picked[i] = pickedHeroIds[i];
+  }
+
+  heroPickState = null;
+  const mode = pickedHeroIds.length >= 5 ? pickedHeroIds.length : 1;
+  document.getElementById('app').innerHTML = '';
+  game = new Game();
+  window.game = game;
+  game.init(mode, pickedHeroIds);
+  game.render();
 }
 
 showHeroSelect();
