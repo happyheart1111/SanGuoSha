@@ -270,7 +270,7 @@ Game.prototype.aiPlayCards = function(player) {
   if (toolIdx >= 0) {
     const card = player.hand[toolIdx];
     const hasEquip = (p) => p.equipment.weapon || p.equipment.armor || p.equipment.plusHorse || p.equipment.minusHorse;
-    const targets = this.players.filter(p => p.alive && p.id !== player.id && (p.hand.length > 0 || (card.type === 'guohe' && hasEquip(p))));
+    const targets = this.players.filter(p => p.alive && p.id !== player.id && (p.hand.length > 0 || (card.type === 'guohe' && (hasEquip(p) || p.judgeArea.length > 0))));
     if (targets.length > 0) {
       const target = targets.reduce((a, b) => a.hp >= b.hp ? a : b);
       this.discardCard(player, card);
@@ -295,6 +295,50 @@ Game.prototype.aiPlayCards = function(player) {
       setTimeout(() => this.aiPlayCards(player), 500);
       return;
     }
+  }
+
+  // 酒：在准备出杀之前使用
+  const jiuIdx = player.hand.findIndex(c => c.type === 'jiu' && !this.jiuDamageBoost);
+  if (jiuIdx >= 0) {
+    const shaIndex = player.hand.findIndex(c => c.type === 'sha');
+    if (shaIndex >= 0) {
+      const shaTarget = this.players.find(p => p.alive && p.id !== player.id && this.calcDistance(player, p, true) <= this.getShaRange(player));
+      if (shaTarget && shaTarget.hp >= 2) {
+        const card = player.hand[jiuIdx];
+        this.discardCard(player, card);
+        this.resolveJiu(player);
+      }
+    }
+  }
+
+  // 火攻：有同花色手牌时对敌人使用
+  const huogongIdx = player.hand.findIndex(c => c.type === 'huogong');
+  if (huogongIdx >= 0) {
+    const card = player.hand[huogongIdx];
+    const targets = this.players.filter(p => p.alive && p.id !== player.id && p.hand.length > 0);
+    if (targets.length > 0) {
+      const target = targets.reduce((a, b) => a.hp <= b.hp ? a : b);
+      // 检查是否有弃牌能力
+      const hasSameSuit = player.hand.some(c => c.suit === (target.hand[0]?.suit || '♠'));
+      if (hasSameSuit || player.hand.length > 2) {
+        this.discardCard(player, card);
+        this.resolveHuogong(player, target);
+        this.render();
+        setTimeout(() => this.aiPlayCards(player), 800);
+        return;
+      }
+    }
+  }
+
+  // 铁索连环：随机选择目标
+  const tiesuoIdx = player.hand.findIndex(c => c.type === 'tiesuo');
+  if (tiesuoIdx >= 0) {
+    const card = player.hand[tiesuoIdx];
+    this.discardCard(player, card);
+    this.resolveTiesuo(player);
+    this.render();
+    setTimeout(() => this.aiPlayCards(player), 500);
+    return;
   }
 
   // 杀（张飞/诸葛连弩无限次数，加吕蒙不打杀保持克己）
@@ -444,13 +488,16 @@ Game.prototype.aiRespondJuedou = function(defender, challenger, lübuInvolved) {
 Game.prototype.aiHandleDying = function(player) {
   const huatuoJijiu = player.hero.id === 'huatuo' && player.hand.some(c => isRedSuit(c.suit));
   const taoCard = player.hand.find(c => c.type === 'tao');
+  const jiuCard = player.hand.find(c => c.type === 'jiu');
   const redCard = huatuoJijiu ? player.hand.find(c => isRedSuit(c.suit)) : null;
-  const useCard = taoCard || redCard;
+  const useCard = taoCard || jiuCard || redCard;
   if (useCard) {
-    const isJijiu = huatuoJijiu && useCard !== taoCard;
+    const isJijiu = huatuoJijiu && useCard !== taoCard && useCard !== jiuCard;
+    const isJiu = useCard && useCard.type === 'jiu';
     this.discardCard(player, useCard);
     player.hp = 1;
-    this.addLog(`${player.hero.name}${isJijiu ? '发动【急救】将红色牌当【桃】' : '使用【桃】'}自救，回复至1点体力`, isJijiu ? 'skill' : 'heal');
+    const methodName = isJiu ? '【酒】当【桃】' : (isJijiu ? '发动【急救】将红色牌当【桃】' : '使用【桃】');
+    this.addLog(`${player.hero.name}${methodName}自救，回复至1点体力`, isJijiu || isJiu ? 'skill' : 'heal');
     return true;
   }
   return false;

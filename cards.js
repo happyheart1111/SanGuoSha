@@ -10,6 +10,9 @@ const CARD_DEFS = [
   { id: 'sha', name: '杀', icon: '⚔️', type: 'sha', category: 'basic' },
   { id: 'shan', name: '闪', icon: '🛡️', type: 'shan', category: 'basic' },
   { id: 'tao', name: '桃', icon: '🍑', type: 'tao', category: 'basic' },
+  // 基本牌 — 军争篇（风林火山）
+  { id: 'jiu', name: '酒', icon: '🍶', type: 'jiu', category: 'basic', pack: '风林火山',
+    desc: '出牌阶段对自己使用，本回合下一张【杀】伤害+1；濒死时当【桃】使用' },
   // 锦囊牌 — 非延时
   { id: 'juedou', name: '决斗', icon: '🤺', type: 'juedou', category: 'tool' },
   { id: 'guohe', name: '过河拆桥', icon: '🌉', type: 'guohe', category: 'tool' },
@@ -21,6 +24,11 @@ const CARD_DEFS = [
   { id: 'wugu', name: '五谷丰登', icon: '🌾', type: 'wugu', category: 'tool' },
   { id: 'wuxie', name: '无懈可击', icon: '🛇', type: 'wuxie', category: 'tool',
     desc: '抵消一张锦囊牌的效果' },
+  // 锦囊牌 — 军争篇（风林火山）
+  { id: 'huogong', name: '火攻', icon: '🔥', type: 'huogong', category: 'tool', pack: '风林火山',
+    desc: '目标展示一张手牌，你弃一张同花色手牌，对其造成1点火焰伤害' },
+  { id: 'tiesuo', name: '铁索连环', icon: '⛓️', type: 'tiesuo', category: 'tool', pack: '风林火山',
+    desc: '选择1~2名角色横置/重置；你可重铸此牌（弃置摸1张牌）' },
   // 延时锦囊 — 判定区
   { id: 'lebu', name: '乐不思蜀', icon: '🎵', type: 'lebu', category: 'delay',
     desc: '判定：若非♥，跳过出牌阶段' },
@@ -84,6 +92,7 @@ const DECK_COMPOSITION = [
   { cardId: 'sha', count: 20 },
   { cardId: 'shan', count: 12 },
   { cardId: 'tao', count: 6 },
+  { cardId: 'jiu', count: 5 },
   { cardId: 'juedou', count: 3 },
   { cardId: 'guohe', count: 4 },
   { cardId: 'shunshou', count: 3 },
@@ -92,6 +101,8 @@ const DECK_COMPOSITION = [
   { cardId: 'wanjian', count: 2 },
   { cardId: 'taoyuan', count: 2 },
   { cardId: 'wugu', count: 2 },
+  { cardId: 'huogong', count: 3 },
+  { cardId: 'tiesuo', count: 6 },
   { cardId: 'hanbing', count: 1 },
   { cardId: 'guding', count: 1 },
   { cardId: 'zhuque', count: 1 },

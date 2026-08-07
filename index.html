@@ -523,6 +523,7 @@ class Game {
       judgeArea: [],
       isHuman: i === 0,
       alive: true,
+      linked: false,
       role: (preRoles && preRoles[i]) ? preRoles[i] : null,
     }));
 
@@ -746,6 +747,8 @@ class Game {
     const player = this.players[this.currentPlayerIdx];
     if (!player.alive) { this.nextPlayer(); return; }
     this.shaUsedThisTurn = false;
+    this.jiuDamageBoost = false;
+    this.tieSuoSelecting = null;
     this.zhihengUsedThisTurn = false;
     this.jieyinUsedThisTurn = false;
     this.qingnangUsedThisTurn = false;
@@ -914,9 +917,18 @@ class Game {
       }
       this.useCardOnTarget(card, player, 'tao');
       this.selectedCardIdx = -1;
+    } else if (card.type === 'jiu') {
+      if (player.hp >= player.hero.maxHp && !this.jiuDamageBoost) {
+        this.addLog('体力值已满且未出【杀】，使用【酒】无益');
+        return;
+      }
+      this.useCardOnTarget(card, player, 'jiu');
+      this.selectedCardIdx = -1;
+    } else if (card.type === 'tiesuo') {
+      this.showTiesuoSelect(player, card);
     } else if (card.type === 'shan') {
       this.addLog('【闪】不能在出牌阶段主动使用');
-    } else if (['juedou', 'guohe', 'shunshou', 'lebu', 'bingliang'].includes(card.type)) {
+    } else if (['juedou', 'guohe', 'shunshou', 'lebu', 'bingliang', 'huogong'].includes(card.type)) {
       const targets = this.getValidTargets(card);
       if (targets.length === 0) { this.addLog('没有可选目标'); return; }
       this.showTargetSelection(card, targets, (target) => {
@@ -937,7 +949,10 @@ class Game {
         const shaRange = this.getShaRange(player);
         return aliveOthers.filter(t => this.calcDistance(player, t, true) <= shaRange);
       }
-      case 'juedou': case 'guohe': case 'shunshou': return aliveOthers;
+      case 'juedou': return aliveOthers;
+      case 'huogong': return aliveOthers.filter(t => t.hand.length > 0);
+      case 'shunshou': return aliveOthers.filter(t => this.buildGuoheChoices(t).length > 0 && this.calcDistance(player, t) <= 1);
+      case 'guohe': return aliveOthers.filter(t => this.buildGuoheChoices(t).length > 0);
       case 'lebu': return aliveOthers.filter(t => t.judgeArea.length < 3);
       case 'bingliang': return aliveOthers.filter(t => t.judgeArea.length < 3 && this.calcDistance(player, t) <= 1);
       default: return [];
@@ -1018,9 +1033,12 @@ class Game {
     } else {
       switch (effectiveType) {
         case 'tao': this.resolveTao(player); break;
+        case 'jiu': this.resolveJiu(player); break;
         case 'juedou': this.resolveJuedou(player, target); break;
         case 'guohe': this.resolveGuohe(target); break;
         case 'shunshou': this.resolveShunshou(player, target); break;
+        case 'huogong': this.resolveHuogong(player, target); break;
+        case 'tiesuo': this.resolveTiesuo(player); break;
         case 'wuzhong': this.resolveWuzhong(player); break;
         case 'nanman': this.resolveNanman(player); break;
         case 'wanjian': this.resolveWanjian(player); break;
@@ -1050,7 +1068,9 @@ class Game {
     const lübuWushuang = source.hero.id === 'lübu';
     const shaText = lübuWushuang ? '发动【无双】需要连续打出2张【闪】' : '需要打出【闪】';
     this.addLog(`${target.hero.name}${shaText}来响应【杀】`);
-    this.pendingDamageCards[target.id] = { card, shanNeeded: lübuWushuang ? 2 : 1 };
+    const jiuBoost = this.jiuDamageBoost ? 1 : 0;
+    if (this.jiuDamageBoost) { this.jiuDamageBoost = false; this.addLog('【酒】效果触发！此【杀】伤害+1', 'skill'); }
+    this.pendingDamageCards[target.id] = { card, shanNeeded: lübuWushuang ? 2 : 1, jiuBoost };
 
     if (target.isHuman && !this.autoPlay) {
       this.render();
@@ -1147,6 +1167,13 @@ class Game {
     }
   }
 
+  resolveJiu(player) {
+    this.jiuDamageBoost = true;
+    this.addLog(`${player.hero.name}使用了【酒】，本回合下一张【杀】伤害+1`, 'skill');
+    if (player.hp < player.hero.maxHp) this.addLog('（【酒】也可在回合外濒死时当【桃】使用）');
+    this.render();
+  }
+
   resolveJuedou(source, target) {
     this.addLog(`${source.hero.name}向${target.hero.name}发起决斗！`, 'important');
     this.juedouRound(source, target);
@@ -1204,38 +1231,216 @@ class Game {
     this.render();
   }
 
+  // 收集目标所有可拆的牌：手牌 + 装备 + 判定区
+  buildGuoheChoices(target) {
+    const list = [];
+    target.hand.forEach((c, i) => list.push({ type: 'hand', idx: i, card: c }));
+    ['weapon', 'armor', 'plusHorse', 'minusHorse'].forEach(s => {
+      if (target.equipment[s]) list.push({ type: 'equip', slot: s, card: target.equipment[s] });
+    });
+    target.judgeArea.forEach((c, i) => list.push({ type: 'judge', idx: i, card: c }));
+    return list;
+  }
+
+  // 执行过河拆桥的弃置
+  executeGuoheDiscard(target, pick) {
+    if (pick.type === 'hand') {
+      const idx = target.hand.indexOf(pick.card);
+      if (idx >= 0) this.discardCard(target, pick.card);
+    } else if (pick.type === 'equip') {
+      target.equipment[pick.slot] = null;
+      this.discardPile.push(pick.card);
+    } else if (pick.type === 'judge') {
+      target.judgeArea = target.judgeArea.filter((c, i) => i !== pick.idx);
+      this.discardPile.push(pick.card);
+    }
+  }
+
   resolveGuohe(target) {
-    if (target.hand.length > 0) {
-      if (target.isHuman && !this.autoPlay) {
-        this.waitingForTarget = { type: 'guohe_discard', target, source: this.players[this.currentPlayerIdx] };
-      } else {
-        const card = target.hand[Math.floor(Math.random() * target.hand.length)];
-        this.discardCard(target, card);
-        this.addLog(`${target.hero.name}被迫弃置了【${card.name}】`);
-      }
+    const choices = this.buildGuoheChoices(target);
+    if (choices.length === 0) {
+      this.addLog(`${target.hero.name}没有可弃置的牌`);
+      this.render();
+      return;
+    }
+
+    if (target.isHuman && !this.autoPlay) {
+      this.waitingForTarget = { type: 'guohe_discard', target, source: this.players[this.currentPlayerIdx], choices };
+      this.render();
+      return;
+    }
+
+    // AI / 随机选择
+    const pick = choices[Math.floor(Math.random() * choices.length)];
+    this.executeGuoheDiscard(target, pick);
+    this.addLog(`${target.hero.name}的【${pick.card.name}】被过河拆桥弃置`);
+    this.render();
+  }
+
+  humanGuoheDiscard(pickObj) {
+    if (!this.waitingForTarget || this.waitingForTarget.type !== 'guohe_discard') return;
+    const { target } = this.waitingForTarget;
+    this.waitingForTarget = null;
+    this.executeGuoheDiscard(target, pickObj);
+    this.addLog(`${target.hero.name}的【${pickObj.card.name}】被过河拆桥弃置`);
+    this.render();
+  }
+
+  humanGuoheDiscardEquip(slot) {
+    if (!this.waitingForTarget || this.waitingForTarget.type !== 'guohe_discard') return;
+    const { target } = this.waitingForTarget;
+    const card = target.equipment[slot];
+    if (!card) return;
+    this.humanGuoheDiscard({ type: 'equip', slot, card });
+  }
+
+  humanGuoheDiscardJudge(idx) {
+    if (!this.waitingForTarget || this.waitingForTarget.type !== 'guohe_discard') return;
+    const { target } = this.waitingForTarget;
+    const card = target.judgeArea[idx];
+    if (!card) return;
+    this.humanGuoheDiscard({ type: 'judge', idx, card });
+  }
+
+  // ==================== 火攻 ====================
+  resolveHuogong(source, target) {
+    this.addLog(`${source.hero.name}对${target.hero.name}使用了【火攻】`, 'skill');
+    if (target.hand.length === 0) {
+      this.addLog(`${target.hero.name}没有手牌，【火攻】无法生效`);
+      this.render();
+      return;
+    }
+    if (target.isHuman && !this.autoPlay) {
+      this.waitingForTarget = { type: 'huogong_show', target, source };
+      this.render();
+      return;
+    }
+    // AI 随机展示手牌
+    const showCard = target.hand[Math.floor(Math.random() * target.hand.length)];
+    this.addLog(`${target.hero.name}展示了【${showCard.name}】(${showCard.suit})`, 'skill');
+    this.doHuogongDiscard(source, target, showCard.suit);
+  }
+
+  humanShowCardForHuogong(cardIdx) {
+    if (!this.waitingForTarget || this.waitingForTarget.type !== 'huogong_show') return;
+    const { target, source } = this.waitingForTarget;
+    const showCard = target.hand[cardIdx];
+    if (!showCard) return;
+    this.waitingForTarget = null;
+    this.addLog(`${target.hero.name}展示了【${showCard.name}】(${showCard.suit})`, 'skill');
+    this.doHuogongDiscard(source, target, showCard.suit);
+    this.render();
+  }
+
+  doHuogongDiscard(source, target, suit) {
+    const matchCards = source.hand.filter(c => c.suit === suit);
+    if (matchCards.length === 0) {
+      this.addLog(`${source.hero.name}没有与${suit}同花色的手牌，【火攻】取消`, 'skill');
+      return;
+    }
+    if (source.isHuman && !this.autoPlay) {
+      this.waitingForTarget = { type: 'huogong_discard', target, source, suit };
+      this.render();
+      return;
+    }
+    // AI 选择同花色牌弃置
+    const discard = matchCards[Math.floor(Math.random() * matchCards.length)];
+    this.discardCard(source, discard);
+    this.addLog(`${source.hero.name}弃置【${discard.name}】对${target.hero.name}造成1点火焰伤害`, 'damage');
+    this.dealDamage(target, source, 1);
+    this.render();
+  }
+
+  humanDiscardForHuogong(cardIdx) {
+    if (!this.waitingForTarget || this.waitingForTarget.type !== 'huogong_discard') return;
+    const { target, source, suit } = this.waitingForTarget;
+    const card = source.hand[cardIdx];
+    if (!card || card.suit !== suit) return;
+    this.waitingForTarget = null;
+    this.discardCard(source, card);
+    this.addLog(`${source.hero.name}弃置【${card.name}】对${target.hero.name}造成1点火焰伤害`, 'damage');
+    this.dealDamage(target, source, 1);
+    this.render();
+  }
+
+  // ==================== 铁索连环 ====================
+  showTiesuoSelect(player, card) {
+    const app = document.getElementById('app');
+    const candidates = this.players.filter(p => p.alive);
+    const selected = new Set();
+    let selectHtml = '';
+    candidates.forEach(p => {
+      const linkedMark = p.linked ? ' (横置)' : '';
+      selectHtml += `<div onclick="game.toggleTiesuoTarget(${p.id})" data-tid="${p.id}" 
+        style="padding:10px 16px;border:2px solid #8b6914;border-radius:8px;cursor:pointer;text-align:center;background:rgba(30,15,5,0.8);">
+        ${p.hero.name}${linkedMark}</div>`;
+    });
+    const selLen = selected.size;
+    app.innerHTML = `
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;gap:20px;">
+        <h1 style="color:#f0d060;">⛓️ 铁索连环</h1>
+        <p style="color:#a08050;">选择1~2名角色横置/重置（已选: <span id="tiesuo-count">0</span>）</p>
+        <div id="tiesuo-targets" style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;">${selectHtml}</div>
+        <div style="margin-top:15px;display:flex;gap:15px;">
+          <button onclick="game.confirmTiesuo()" style="padding:10px 28px;background:#8b6914;border:none;border-radius:6px;color:white;cursor:pointer;font-size:16px;">确认使用</button>
+          <button onclick="game.reforgeTiesuo()" style="padding:10px 28px;background:#555;border:none;border-radius:6px;color:#ccc;cursor:pointer;font-size:16px;">重铸（弃牌摸1张）</button>
+        </div>
+      </div>`;
+    this.tieSuoSelecting = { player, card, selected, candidates };
+  }
+
+  toggleTiesuoTarget(pid) {
+    if (!this.tieSuoSelecting) return;
+    const ts = this.tieSuoSelecting;
+    if (ts.selected.has(pid)) {
+      ts.selected.delete(pid);
     } else {
-      // 检查所有装备区域
-      const equipSlots = ['weapon', 'armor', 'plusHorse', 'minusHorse'];
-      const existingEquip = equipSlots.find(s => target.equipment[s]);
-      if (existingEquip) {
-        const eq = target.equipment[existingEquip];
-        target.equipment[existingEquip] = null;
-        this.discardPile.push(eq);
-        this.addLog(`${target.hero.name}的装备【${eq.name}】被弃置`);
-      } else {
-        this.addLog(`${target.hero.name}没有手牌或装备可弃`);
-      }
+      if (ts.selected.size >= 2) return;
+      ts.selected.add(pid);
+    }
+    document.getElementById('tiesuo-count').textContent = ts.selected.size;
+    const targetDivs = document.querySelectorAll('[data-tid]');
+    targetDivs.forEach(div => {
+      const tid = parseInt(div.getAttribute('data-tid'));
+      div.style.borderColor = ts.selected.has(tid) ? '#f0d060' : '#8b6914';
+      div.style.background = ts.selected.has(tid) ? 'rgba(240,208,96,0.2)' : 'rgba(30,15,5,0.8)';
+    });
+  }
+
+  confirmTiesuo() {
+    if (!this.tieSuoSelecting) return;
+    const { player, card, selected } = this.tieSuoSelecting;
+    this.tieSuoSelecting = null;
+    this.discardCard(player, card);
+    const targets = [...selected].map(id => this.players[id]);
+    for (const t of targets) {
+      t.linked = !t.linked;
+      this.addLog(`${t.hero.name}被${t.linked ? '横置' : '重置'}（铁索连环）`, 'skill');
     }
     this.render();
   }
 
-  humanGuoheDiscard(cardIdx) {
-    if (!this.waitingForTarget || this.waitingForTarget.type !== 'guohe_discard') return;
-    const { target } = this.waitingForTarget;
-    this.waitingForTarget = null;
-    const card = target.hand[cardIdx];
-    this.discardCard(target, card);
-    this.addLog(`${target.hero.name}被迫弃置了【${card.name}】`);
+  reforgeTiesuo() {
+    if (!this.tieSuoSelecting) return;
+    const { player, card } = this.tieSuoSelecting;
+    this.tieSuoSelecting = null;
+    this.discardCard(player, card);
+    this.drawCard(player, 1);
+    this.addLog(`${player.hero.name}重铸【铁索连环】，摸1张牌`);
+    this.render();
+  }
+
+  resolveTiesuo(player) {
+    // AI 简单处理：随机选择1~2个目标
+    const candidates = this.players.filter(p => p.alive);
+    const count = Math.min(2, 1 + Math.floor(Math.random() * Math.min(2, candidates.length)));
+    const shuffled = [...candidates];
+    this.shuffle(shuffled);
+    const targets = shuffled.slice(0, count);
+    for (const t of targets) {
+      t.linked = !t.linked;
+      this.addLog(`${t.hero.name}被${t.linked ? '横置' : '重置'}（铁索连环）`, 'skill');
+    }
     this.render();
   }
 
@@ -1258,32 +1463,74 @@ class Game {
   }
 
   resolveShunshou(source, target) {
-    if (target.hand.length > 0) {
-      if (target.isHuman && !this.autoPlay) {
-        this.waitingForTarget = { type: 'shunshou_steal', target, source };
-      } else {
-        const card = target.hand[Math.floor(Math.random() * target.hand.length)];
-        this.discardCard(target, card);
-        card.ownerId = source.id;
-        source.hand.push(card);
-        this.addLog(`${source.hero.name}顺手牵羊获得了${target.hero.name}的【${card.name}】`);
-      }
-    } else {
-      this.addLog(`${target.hero.name}没有手牌`);
+    const choices = this.buildGuoheChoices(target);
+    if (choices.length === 0) {
+      this.addLog(`${target.hero.name}没有可顺的牌`);
+      this.render();
+      return;
     }
+
+    if (target.isHuman && !this.autoPlay) {
+      this.waitingForTarget = { type: 'shunshou_steal', target, source, choices };
+      this.render();
+      return;
+    }
+
+    // AI / 随机选择
+    const pick = choices[Math.floor(Math.random() * choices.length)];
+    this.executeShunshouSteal(source, target, pick);
+    const areaName = pick.type === 'hand' ? '手牌' : pick.type === 'equip' ? '装备' : '判定区';
+    this.addLog(`${source.hero.name}顺手牵羊从${target.hero.name}${areaName}获得了【${pick.card.name}】`);
     this.render();
   }
 
-  humanShunshouSteal(cardIdx) {
+  executeShunshouSteal(source, target, pick) {
+    if (pick.type === 'hand') {
+      const idx = target.hand.indexOf(pick.card);
+      if (idx >= 0) {
+        target.hand.splice(idx, 1);
+        pick.card.ownerId = source.id;
+        source.hand.push(pick.card);
+      }
+    } else if (pick.type === 'equip') {
+      target.equipment[pick.slot] = null;
+      pick.card.ownerId = source.id;
+      source.hand.push(pick.card);
+    } else if (pick.type === 'judge') {
+      target.judgeArea = target.judgeArea.filter((c, i) => i !== pick.idx);
+      this.discardPile.push(pick.card);
+      // 从判定区移到自己的手牌（生成新卡实例）
+      const newCard = { ...pick.card };
+      source.hand.push(newCard);
+      this.addLog(`${source.hero.name}将${target.hero.name}判定区的【${pick.card.name}】移入手中`);
+      return;
+    }
+  }
+
+  humanShunshouSteal(pickObj) {
     if (!this.waitingForTarget || this.waitingForTarget.type !== 'shunshou_steal') return;
     const { target, source } = this.waitingForTarget;
     this.waitingForTarget = null;
-    const card = target.hand[cardIdx];
-    this.discardCard(target, card);
-    card.ownerId = source.id;
-    source.hand.push(card);
-    this.addLog(`${source.hero.name}顺手牵羊获得了${target.hero.name}的【${card.name}】`);
+    this.executeShunshouSteal(source, target, pickObj);
+    const areaName = pickObj.type === 'hand' ? '手牌' : pickObj.type === 'equip' ? '装备' : '判定区';
+    this.addLog(`${source.hero.name}顺手牵羊从${target.hero.name}${areaName}获得了【${pickObj.card.name}】`);
     this.render();
+  }
+
+  humanShunshouStealEquip(slot) {
+    if (!this.waitingForTarget || this.waitingForTarget.type !== 'shunshou_steal') return;
+    const { target } = this.waitingForTarget;
+    const card = target.equipment[slot];
+    if (!card) return;
+    this.humanShunshouSteal({ type: 'equip', slot, card });
+  }
+
+  humanShunshouStealJudge(idx) {
+    if (!this.waitingForTarget || this.waitingForTarget.type !== 'shunshou_steal') return;
+    const { target } = this.waitingForTarget;
+    const card = target.judgeArea[idx];
+    if (!card) return;
+    this.humanShunshouSteal({ type: 'judge', idx, card });
   }
 
   resolveWuzhong(player) {
@@ -1393,6 +1640,11 @@ class Game {
   // ==================== 伤害结算（含技能触发）====================
 
   dealDamage(target, source, amount, card = null) {
+    // 酒效果：对该杀的伤害+1
+    if (card && card.type === 'sha' && this.pendingDamageCards[target.id] && this.pendingDamageCards[target.id].jiuBoost) {
+      amount += this.pendingDamageCards[target.id].jiuBoost;
+      this.pendingDamageCards[target.id].jiuBoost = 0; // 只加成一次
+    }
     for (let i = 0; i < amount; i++) {
       if (!target.alive) return;
       target.hp--;
@@ -1607,13 +1859,14 @@ class Game {
   handleDying(player, source) {
     this.addLog(`${player.hero.name}处于濒死状态，需要打出【桃】`, 'damage');
 
-    // 华佗急救：红色牌可当桃
+    // 华佗急救：红色牌可当桃；酒也可在濒死时当桃
     const hasTao = player.hand.some(c => c.type === 'tao');
+    const hasJiu = player.hand.some(c => c.type === 'jiu');
     const huatuoJijiu = player.hero.id === 'huatuo' && player.hand.some(c => isRedSuit(c.suit));
 
     if (player.isHuman && !this.autoPlay) {
-      if (hasTao || huatuoJijiu) {
-        this.waitingForTarget = { type: 'dying', player, huatuoJijiu, source };
+      if (hasTao || hasJiu || huatuoJijiu) {
+        this.waitingForTarget = { type: 'dying', player, huatuoJijiu, hasJiu, source };
         return;
       }
     } else {
@@ -2193,7 +2446,13 @@ class Game {
               else clickable = (card.type === wt.requiredType);
             }
             else if (wt.type === 'dying') {
-              clickable = (card.type === 'tao') || (wt.huatuoJijiu && isRedSuit(card.suit));
+              clickable = (card.type === 'tao') || (card.type === 'jiu') || (wt.huatuoJijiu && isRedSuit(card.suit));
+            }
+            else if (wt.type === 'huogong_show') {
+              clickable = player.isHuman && wt.target.id === player.id;
+            }
+            else if (wt.type === 'huogong_discard') {
+              clickable = player.isHuman && wt.source.id === player.id && card.suit === wt.suit;
             }
             else if (wt.type === 'discard_phase' || wt.type === 'jieyin_discard' || wt.type === 'yeyan_discard'
               || wt.type === 'fangzhu_discard' || wt.type === 'guohe_discard' || wt.type === 'shunshou_steal') {
@@ -2450,7 +2709,7 @@ class Game {
     }
     html += '<div class="hero-header">';
     html += `<div class="hero-avatar ${player.hero.avatarClass}">${player.hero.name[0]}</div>`;
-    html += `<div><div class="hero-name">${player.hero.name}</div><div class="hero-title">${player.hero.title}</div><div class="hero-faction">${player.hero.faction}</div>`;
+    html += `<div><div class="hero-name">${player.hero.name}${player.linked ? ' ⛓️' : ''}</div><div class="hero-title">${player.hero.title}</div><div class="hero-faction">${player.hero.faction}</div>`;
     // 显示身份：人类玩家始终可见，主公始终公开，其他人死亡后公开
     if (this.gameMode >= 5 && player.role) {
       const showRole = player.isHuman || this.rolesRevealed[player.id] || this.gameOver || player.role === 'zhugong';
@@ -2485,19 +2744,34 @@ class Game {
       { slot: 'plusHorse', label: '+1坐骑', cls: 'p1h' },
       { slot: 'minusHorse', label: '-1坐骑', cls: 'm1h' },
     ];
+    // 过河拆桥/顺手牵羊时人类目标可点击装备和判定区
+    const guoheTarget = this.waitingForTarget && !this.autoPlay
+      && this.waitingForTarget.type === 'guohe_discard' && this.waitingForTarget.target.id === player.id;
+    const shunshouTarget = this.waitingForTarget && !this.autoPlay
+      && this.waitingForTarget.type === 'shunshou_steal' && this.waitingForTarget.target.id === player.id;
+    const canClickEquip = guoheTarget || shunshouTarget;
     for (const { slot, label, cls } of equipSlots) {
       const eq = player.equipment[slot];
       const eqName = eq ? eq.name : '(空)';
+      let clickAttr = '';
+      if (canClickEquip && eq) {
+        if (guoheTarget) clickAttr = ` onclick="event.stopPropagation(); game.humanGuoheDiscardEquip('${slot}')" style="cursor:pointer;border:2px dashed #f0d060;" title="点击弃置此装备"`;
+        else if (shunshouTarget) clickAttr = ` onclick="event.stopPropagation(); game.humanShunshouStealEquip('${slot}')" style="cursor:pointer;border:2px dashed #60d0ff;" title="点击顺走此装备"`;
+      }
       html += `<div class="equip-zone"><div class="equip-zone-label">${label}</div>
-        <div class="equip-slot ${eq ? 'occupied ' + cls : ''}">${eqName}</div></div>`;
+        <div class="equip-slot ${eq ? 'occupied ' + cls : ''}"${clickAttr}>${eqName}</div></div>`;
     }
     html += '</div>';
 
     html += '<div class="judge-area">';
     html += '<div class="judge-zone-label">判定区</div>';
     if (player.judgeArea.length > 0) {
-      for (const jc of player.judgeArea) {
-        html += `<div class="judge-slot has-card">${jc.icon || ''} ${jc.name}</div>`;
+      for (let ji = 0; ji < player.judgeArea.length; ji++) {
+        const jc = player.judgeArea[ji];
+        let jclick = '';
+        if (guoheTarget) jclick = ` onclick="event.stopPropagation(); game.humanGuoheDiscardJudge(${ji})" style="cursor:pointer;border:2px dashed #f0d060;" title="点击弃置此延时锦囊"`;
+        else if (shunshouTarget) jclick = ` onclick="event.stopPropagation(); game.humanShunshouStealJudge(${ji})" style="cursor:pointer;border:2px dashed #60d0ff;" title="点击顺走此延时锦囊"`;
+        html += `<div class="judge-slot has-card"${jclick}>${jc.icon || ''} ${jc.name}</div>`;
       }
     } else {
       html += '<div class="judge-slot">(空)</div>';
@@ -2551,10 +2825,12 @@ class Game {
         }
         return;
       }
-      if (wt.type === 'dying' && (card.type === 'tao' || (wt.huatuoJijiu && isRedSuit(card.suit)))) { this.humanDyingUseTao(card); return; }
+      if (wt.type === 'dying' && (card.type === 'tao' || card.type === 'jiu' || (wt.huatuoJijiu && isRedSuit(card.suit)))) { this.humanDyingUseTao(card); return; }
+      if (wt.type === 'huogong_show') { this.humanShowCardForHuogong(idx); return; }
+      if (wt.type === 'huogong_discard') { this.humanDiscardForHuogong(idx); return; }
       if (wt.type === 'juedou_defend_second' && (card.type === 'sha' || (humanPlayer.hero.id === 'guanyu' && isRedSuit(card.suit)))) { this.humanRespondJuedouSecond(card); return; }
-      if (wt.type === 'guohe_discard') { this.humanGuoheDiscard(idx); return; }
-      if (wt.type === 'shunshou_steal') { this.humanShunshouSteal(idx); return; }
+      if (wt.type === 'guohe_discard') { this.humanGuoheDiscard({type: 'hand', idx, card: card}); return; }
+      if (wt.type === 'shunshou_steal') { this.humanShunshouSteal({type: 'hand', idx, card: card}); return; }
       if (wt.type === 'discard_phase') { this.humanSelectDiscard(idx); return; }
       if (wt.type === 'jieyin_discard') { this.humanSelectJieyinDiscard(idx); return; }
       if (wt.type === 'yeyan_discard') { this.humanSelectYeyanDiscard(idx); return; }
