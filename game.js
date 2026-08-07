@@ -869,6 +869,8 @@ class Game {
     this.render();
     if (this.autoPlay && player.isHuman) {
       setTimeout(() => this.aiPlayPhase(player), 500);
+    } else if (!player.isHuman) {
+      setTimeout(() => this.aiPlayPhase(player), 500);
     }
   }
 
