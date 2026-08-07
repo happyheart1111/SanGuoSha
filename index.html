@@ -525,10 +525,7 @@ class Game {
       role: null,
     }));
 
-    // 随机分配座位号（人类玩家固定在0号位底部，其余随机顺时针排列）
-    this.assignSeats();
-
-    // 5人或8人模式：分配身份
+    // 5人或8人模式：分配身份（在座位分配前，此时 players[0] 是人类）
     if (gameMode >= 5) {
       const rolePool = buildRolePool(gameMode);
       this.shuffle(rolePool);
@@ -536,6 +533,9 @@ class Game {
       const humanRole = this.players[0].role;
       this.addLog(`你的身份：${getRoleDisplayName(humanRole)}`, 'important');
     }
+
+    // 随机分配座位号（所有玩家随机入座，然后按座位排序保证出牌顺序）
+    this.assignSeats();
 
     this.initDeck();
     this.dealInitialCards();
@@ -568,7 +568,8 @@ class Game {
     const humanHero = HEROES[heroIds[0]];
     this.addLog(`你扮演【${humanHero.name}】`);
     if (gameMode >= 5) {
-      this.addLog(`${getRoleSummary(this.players[0].role)}`, 'important');
+      const humanRole = this.players.find(p => p.isHuman).role;
+      this.addLog(`${getRoleSummary(humanRole)}`, 'important');
     } else {
       const otherNames = heroIds.slice(1).map(id => '【' + HEROES[id].name + '】').join('、');
       this.addLog(`对手：${otherNames}`);
@@ -617,7 +618,7 @@ class Game {
     this.startCurrentTurn();
   }
 
-  // 随机分配座位号（所有玩家随机入座）
+  // 随机分配座位号（所有玩家随机入座），然后按座位号排序保证出牌顺序正确
   assignSeats() {
     const n = this.players.length;
     const seats = [];
@@ -626,6 +627,8 @@ class Game {
     for (let i = 0; i < n; i++) {
       this.players[i].seat = seats[i];
     }
+    // 按座位号排序，使 currentPlayerIdx 递增 = 按座位号顺序出牌
+    this.players.sort((a, b) => a.seat - b.seat);
   }
 
   initDeck() {
