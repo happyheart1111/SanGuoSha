@@ -607,15 +607,148 @@ class Game {
     this.autoPlay = !this.autoPlay;
     if (this.autoPlay) {
       this.addLog('已开启托管，AI将代你出牌', 'auto');
-      // 如果当前是人类回合且等待操作，让AI接管
-      if (this.phase === 'play' && this.players[this.currentPlayerIdx]?.isHuman && !this.waitingForTarget) {
-        const player = this.players[this.currentPlayerIdx];
-        setTimeout(() => this.aiPlayPhase(player), 500);
-      }
+      // 如果正在等待人类响应，用AI自动解决
+      this.resolveAutoPlayPending();
     } else {
       this.addLog('已取消托管，恢复正常操作', 'auto');
     }
     this.render();
+  }
+
+  resolveAutoPlayPending() {
+    // 没有等待中的操作：回到人类回合时AI接管
+    if (!this.waitingForTarget) {
+      if (this.phase === 'play' && this.players[this.currentPlayerIdx]?.isHuman) {
+        const player = this.players[this.currentPlayerIdx];
+        setTimeout(() => this.aiPlayPhase(player), 500);
+      }
+      return;
+    }
+    const wt = this.waitingForTarget;
+    this.waitingForTarget = null;
+
+    switch (wt.type) {
+      case 'guohe_discard': {
+        const pick = wt.choices[Math.floor(Math.random() * wt.choices.length)];
+        this.executeGuoheDiscard(wt.target, pick);
+        this.addLog(`${wt.target.hero.name}的【${pick.card.name}】被过河拆桥弃置`, 'auto');
+        this._resumeSourcePlay(wt.source);
+        break;
+      }
+      case 'shunshou_steal': {
+        const pick = wt.choices[Math.floor(Math.random() * wt.choices.length)];
+        this.executeShunshouSteal(wt.source, wt.target, pick);
+        const areaName = pick.type === 'hand' ? '手牌' : pick.type === 'equip' ? '装备' : '判定区';
+        this.addLog(`${wt.source.hero.name}顺手牵羊从${wt.target.hero.name}${areaName}获得了【${pick.card.name}】`, 'auto');
+        this._resumeSourcePlay(wt.source);
+        break;
+      }
+      case 'shan_response': {
+        this.aiRespondToSha(wt.target, wt.source, wt.card);
+        this._resumeSourcePlay(wt.source);
+        break;
+      }
+      case 'aoe_response': {
+        const { source, target, requiredType, targets, aoeIdx } = wt;
+        this.aiRespondToAOE(target, source, requiredType);
+        this.render();
+        setTimeout(() => this.processAOETargets(source, targets, requiredType, aoeIdx + 1), 400);
+        return;
+      }
+      case 'dying': {
+        const saved = this.aiHandleDying(wt.player);
+        if (!saved) this.killPlayer(wt.player, wt.source);
+        this.checkGameOver();
+        if (!this.gameOver) this._resumeGameAfterDying(wt.player);
+        break;
+      }
+      case 'juedou_defend':
+      case 'juedou_defend_second': {
+        const { challenger, defender } = wt;
+        const lübuInvolved = challenger.hero.id === 'lübu' || defender.hero.id === 'lübu';
+        this.aiRespondJuedou(defender, challenger, lübuInvolved);
+        this._resumeSourcePlay(challenger);
+        break;
+      }
+      case 'huogong_show': {
+        const showCard = wt.target.hand[Math.floor(Math.random() * wt.target.hand.length)];
+        this.addLog(`${wt.target.hero.name}展示了【${showCard.name}】(${showCard.suit})`, 'skill');
+        this.doHuogongDiscard(wt.source, wt.target, showCard.suit);
+        if (!this.waitingForTarget) this._resumeSourcePlay(wt.source);
+        break;
+      }
+      case 'huogong_discard': {
+        const matchCards = wt.source.hand.filter(c => c.suit === wt.suit);
+        if (matchCards.length > 0) {
+          const discard = matchCards[Math.floor(Math.random() * matchCards.length)];
+          this.discardCard(wt.source, discard);
+          this.addLog(`${wt.source.hero.name}弃置【${discard.name}】对${wt.target.hero.name}造成1点火焰伤害`, 'damage');
+          this.dealDamage(wt.target, wt.source, 1);
+        }
+        this._resumeSourcePlay(wt.source);
+        break;
+      }
+      case 'use_card': {
+        const player = this.players[this.currentPlayerIdx];
+        setTimeout(() => this.aiPlayPhase(player), 300);
+        return;
+      }
+      case 'discard_phase': {
+        const player = this.players[this.currentPlayerIdx];
+        setTimeout(() => this.aiGoToDiscardPhase(player), 300);
+        return;
+      }
+      case 'haoshi_select': {
+        const t = wt.targets[Math.floor(Math.random() * wt.targets.length)];
+        this._executeHaoshi(wt.player, t);
+        this._resumeSourcePlay(wt.player);
+        break;
+      }
+      case 'qingnang_select': {
+        const t = wt.targets[Math.floor(Math.random() * wt.targets.length)];
+        t.hp++;
+        this.addLog(`${wt.player.hero.name}发动【青囊】令${t.hero.name}回复1点体力`, 'skill');
+        this._resumeSourcePlay(wt.player);
+        break;
+      }
+      default:
+        // 未知等待类型：尝试恢复当前回合的玩家
+        if (this.players[this.currentPlayerIdx]?.alive) {
+          this._resumeSourcePlay(this.players[this.currentPlayerIdx]);
+        }
+    }
+    this.render();
+  }
+
+  _resumeSourcePlay(source) {
+    if (!source || !source.alive) return;
+    if (source.isHuman && this.autoPlay) {
+      setTimeout(() => this.aiPlayCards(source), 200);
+    } else if (!source.isHuman) {
+      setTimeout(() => this.aiPlayCards(source), 200);
+    }
+  }
+
+  _resumeGameAfterDying(player) {
+    if (this.gameOver) return;
+    // 继续当前回合或下一位玩家
+    const current = this.players[this.currentPlayerIdx];
+    if (!current.alive) { this.nextPlayer(); return; }
+    if (this.phase === 'play') {
+      if (current.isHuman && this.autoPlay) setTimeout(() => this.aiPlayCards(current), 300);
+      else if (!current.isHuman) setTimeout(() => this.aiPlayCards(current), 300);
+    } else if (this.phase === 'discard') {
+      setTimeout(() => this.goToDiscardPhase(current), 300);
+    }
+  }
+
+  _executeHaoshi(player, target) {
+    const card = player.hand[0];
+    if (!card) return;
+    this.discardCard(player, card);
+    target.hp++;
+    this.haoshiUsedThisTurn = true;
+    this.addLog(`${player.hero.name}发动【好施】，弃【${card.name}】令${target.hero.name}回复1点体力`, 'skill');
   }
 
   // ==================== 回合流程 ====================
@@ -1047,6 +1180,9 @@ class Game {
       this.dealDamage(target, source, 1, card);
     }
     this.render();
+    if (source && (!source.isHuman || (source.isHuman && this.autoPlay))) {
+      setTimeout(() => this.aiPlayCards(source), 140);
+    }
     this._pvpSyncState();
   }
 
@@ -1058,6 +1194,9 @@ class Game {
     if (!judgeCard) {
       this.dealDamage(target, source, 1, card);
       this.render();
+      if (source && (!source.isHuman || (source.isHuman && this.autoPlay))) {
+        setTimeout(() => this.aiPlayCards(source), 140);
+      }
       return;
     }
     const pd = this.pendingDamageCards[target.id];
@@ -1082,6 +1221,9 @@ class Game {
       }, 100);
     }
     this.render();
+    if (source && (!source.isHuman || (source.isHuman && this.autoPlay))) {
+      setTimeout(() => this.aiPlayCards(source), 140);
+    }
   }
 
   resolveTao(player) {
@@ -1137,6 +1279,7 @@ class Game {
     } else {
       this.addLog(`${defender.hero.name}无法打出【杀】，受到1点伤害`);
       this.dealDamage(defender, challenger, 1);
+      this._resumeSourcePlay(challenger);
     }
     this.render();
   }
@@ -1153,6 +1296,7 @@ class Game {
     } else {
       this.addLog(`${defender.hero.name}无法打出第2张【杀】，受到1点伤害`);
       this.dealDamage(defender, challenger, 1);
+      this._resumeSourcePlay(challenger);
     }
     this.render();
   }
@@ -1210,8 +1354,8 @@ class Game {
     this.executeGuoheDiscard(target, pickObj);
     this.addLog(`${target.hero.name}的【${pickObj.card.name}】被过河拆桥弃置`);
     this.render();
-    // 如果是 AI 对玩家使用，完成后继续 AI 的出牌阶段
-    if (source && !source.isHuman) {
+    // 如果是 AI 或托管人类对玩家使用，完成后继续出牌阶段
+    if (source && (!source.isHuman || (source.isHuman && this.autoPlay))) {
       setTimeout(() => this.aiPlayCards(source), 140);
     }
   }
@@ -1259,6 +1403,7 @@ class Game {
     this.waitingForTarget = null;
     this.addLog(`${target.hero.name}展示了【${showCard.name}】(${showCard.suit})`, 'skill');
     this.doHuogongDiscard(source, target, showCard.suit);
+    if (!this.waitingForTarget) this._resumeSourcePlay(source);
     this.render();
   }
 
@@ -1290,6 +1435,7 @@ class Game {
     this.discardCard(source, card);
     this.addLog(`${source.hero.name}弃置【${card.name}】对${target.hero.name}造成1点火焰伤害`, 'damage');
     this.dealDamage(target, source, 1);
+    if (!this.waitingForTarget) this._resumeSourcePlay(source);
     this.render();
   }
 
@@ -1445,8 +1591,8 @@ class Game {
     const areaName = pickObj.type === 'hand' ? '手牌' : pickObj.type === 'equip' ? '装备' : '判定区';
     this.addLog(`${source.hero.name}顺手牵羊从${target.hero.name}${areaName}获得了【${pickObj.card.name}】`);
     this.render();
-    // 如果是 AI 对玩家使用，完成后继续 AI 的出牌阶段
-    if (source && !source.isHuman) {
+    // 如果是 AI 或托管人类对玩家使用，完成后继续出牌阶段
+    if (source && (!source.isHuman || (source.isHuman && this.autoPlay))) {
       setTimeout(() => this.aiPlayCards(source), 140);
     }
   }
@@ -1533,7 +1679,13 @@ class Game {
       this.dealDamage(target, source, 1);
     }
     this.render();
-    setTimeout(() => this.processAOETargets(source, targets, requiredType, aoeIdx + 1), 400);
+    const nextIdx = aoeIdx + 1;
+    if (nextIdx >= targets.length) {
+      // 所有AOE目标已处理完毕，恢复出牌
+      this._resumeSourcePlay(source);
+    } else {
+      setTimeout(() => this.processAOETargets(source, targets, requiredType, nextIdx), 400);
+    }
   }
 
   resolveTaoyuan(player) {
@@ -1663,6 +1815,7 @@ class Game {
       this.discardPile.push(card);
       this.addLog(`${target.hero.name}放弃发动【奸雄】`);
     }
+    this._resumeSourcePlay(this.players[this.currentPlayerIdx]);
     this.render();
   }
 
@@ -1685,6 +1838,7 @@ class Game {
     } else {
       this.addLog(`${target.hero.name}放弃发动【天妒】`);
     }
+    this._resumeSourcePlay(this.players[this.currentPlayerIdx]);
     this.render();
   }
 
@@ -1708,15 +1862,21 @@ class Game {
     const { target, source } = this.waitingForTarget;
     this.waitingForTarget = null;
     if (choice === 'discard') {
-      if (source.hand.length === 0) { this.addLog('没有手牌可弃，曹丕摸1张牌'); this.drawCard(target, 1); }
+      if (source.hand.length === 0) { this.addLog('没有手牌可弃，曹丕摸1张牌'); this.drawCard(target, 1); this._resumeSourcePlay(this.players[this.currentPlayerIdx]); }
       else {
         // 进入弃牌选择
         this.waitingForTarget = { type: 'fangzhu_discard', target, source };
         this.render();
+        return;
       }
     } else {
-      this.drawCard(target, 1);
-      this.addLog(`${target.hero.name}发动【放逐】摸了1张牌`, 'skill');
+      if (choice === 'skip') {
+        this.addLog(`${source.hero.name}放弃发动【放逐】`, 'skill');
+      } else {
+        this.drawCard(target, 1);
+        this.addLog(`${target.hero.name}发动【放逐】摸了1张牌`, 'skill');
+      }
+      this._resumeSourcePlay(this.players[this.currentPlayerIdx]);
     }
     this.render();
   }
@@ -1728,6 +1888,7 @@ class Game {
     const card = source.hand[cardIdx];
     this.discardCard(source, card);
     this.addLog(`${source.hero.name}弃置了【${card.name}】（曹丕【放逐】）`, 'skill');
+    this._resumeSourcePlay(this.players[this.currentPlayerIdx]);
     this.render();
   }
 
@@ -1767,7 +1928,10 @@ class Game {
     } else {
       this.addLog(`${target.hero.name}放弃发动【雷击】`);
     }
-    if (!this.gameOver) this.render();
+    if (!this.gameOver) {
+      this._resumeSourcePlay(this.players[this.currentPlayerIdx]);
+      this.render();
+    }
   }
 
   // 华雄恃勇
@@ -1850,10 +2014,19 @@ class Game {
       this.discardCard(player, withCard);
       player.hp = 1;
       this.addLog(`${player.hero.name}${isJijiu ? '发动【急救】将红色牌当【桃】' : '使用【桃】'}自救，回复至1点体力`, isJijiu ? 'skill' : 'heal');
+      this._resumeSourcePlay(source || this.players[this.currentPlayerIdx]);
     } else {
       this.killPlayer(player, source);
+      this.checkGameOver();
+      // 如果游戏未结束，恢复当前回合
+      if (!this.gameOver) {
+        const current = this.players[this.currentPlayerIdx];
+        if (current && current.alive && this.phase === 'play') {
+          if (current.isHuman && this.autoPlay) setTimeout(() => this.aiPlayCards(current), 300);
+          else if (!current.isHuman) setTimeout(() => this.aiPlayCards(current), 300);
+        }
+      }
     }
-    this.checkGameOver();
     this.render();
   }
 
