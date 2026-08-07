@@ -2563,30 +2563,32 @@ class Game {
       ${this._isPvP ? this._renderPvPBadge() : ''}
     </div>`;
 
-    // 平铺牌局
-    const totalPlayers = this.players.length;
-    let cols = 2;
-    if (totalPlayers >= 7) cols = 4;
-    else if (totalPlayers >= 5) cols = 3;
-    else if (totalPlayers >= 3) cols = 2;
-    else cols = 1;
+    // 椭圆环形桌位布局（人类固定桌底，其余按座位环绕）
+    const sortedPlayers = [...this.players].sort((a, b) => a.seat - b.seat);
+    const N = sortedPlayers.length;
+    const step = 360 / N;
+    let humanPos = sortedPlayers.findIndex(p => p.isHuman);
+    if (humanPos < 0) humanPos = 0;
+    const seatOffset = 180 - humanPos * step; // 旋转桌面，使人类固定到桌底(180°)
 
     html += '<div class="game-board">';
+    html += '<div class="seat-table">';
 
-    // 牌堆信息条
-    html += `<div class="table-deck-bar">
+    // 桌心：牌堆 + 出牌流向提示
+    html += `<div class="table-center">
       <div class="deck-visual-bar">牌堆</div>
       <span class="table-deck-info">牌堆 ${this.deck.length} 张 | 弃牌 ${this.discardPile.length} 张</span>
-      <div style="font-size:28px;color:rgba(240,208,96,0.3);font-weight:bold;letter-spacing:5px;">殺</div>
+      <div class="table-ring-hint">出牌顺序 ↺</div>
     </div>`;
 
-    // 玩家网格（按座位号排序展示所有玩家）
-    const sortedPlayers = [...this.players].sort((a, b) => a.seat - b.seat);
-    html += `<div class="players-grid cols-${cols}">`;
-
     for (const p of sortedPlayers) {
+      const idx = sortedPlayers.indexOf(p);
+      const angle = ((idx * step + seatOffset) % 360 + 360) % 360;
+      const theta = angle * Math.PI / 180;
+      const xPct = (36 * Math.sin(theta)).toFixed(2);
+      const yPct = (-34 * Math.cos(theta)).toFixed(2);
       const isHuman = p.isHuman;
-      html += `<div class="player-slot ${isHuman ? 'has-human' : ''}">`;
+      html += `<div class="player-slot ${isHuman ? 'has-human' : ''}" style="--x:${xPct}%;--y:${yPct}%;">`;
 
       // 英雄面板
       html += this.renderHeroPanel(p, isHuman, p.seat);
@@ -2608,105 +2610,109 @@ class Game {
         html += '</div>';
       }
 
-      // 人类玩家手牌（在网格槽位内）
-      if (isHuman && humanPlayer.alive) {
-        html += '<div class="human-hand-inline">';
-        html += `<div class="hand-label-inline"><span>手牌 (${humanPlayer.hand.length}张) ${this.autoPlay ? '<span style="color:#60ff80;">🤖托管中</span>' : ''}</span>`;
-
-        if (this.waitingForTarget?.type === 'discard_phase') {
-          const wt = this.waitingForTarget;
-          html += `<span style="color:#ff6060;">弃 ${wt.needDiscard} 张 (已选 ${wt.selected.length})</span>`;
-        }
-        if (this.waitingForTarget?.type === 'jieyin_discard') {
-          const wt = this.waitingForTarget;
-          html += `<span style="color:#ffe080;">结姻选牌 (已选 ${wt.selected.length})</span>`;
-        }
-        if (this.waitingForTarget?.type === 'yeyan_discard') {
-          const wt = this.waitingForTarget;
-          html += `<span style="color:#ffa040;">业炎选牌 (已选 ${wt.selected.length})</span>`;
-        }
-        html += '</div>'; // close hand-label-inline
-
-        for (let i = 0; i < humanPlayer.hand.length; i++) {
-          const card = humanPlayer.hand[i];
-          const isSelected = this.selectedCardIdx === i;
-          const isDiscardSelected = this.waitingForTarget?.selected?.includes(i);
-          let cardClass = this.getCardStyle(card);
-          if (isSelected || isDiscardSelected) cardClass += ' selected';
-          if (isHumanTurn && humanPlayer.hero.id === 'guanyu' && card.type !== 'sha' && isRedSuit(card.suit)
-              && this.phase === 'play' && !this.waitingForTarget && !this.autoPlay) {
-            cardClass += ' wusheng-able';
-          }
-          let clickable = true;
-
-          if (this.waitingForTarget) {
-            const wt = this.waitingForTarget;
-            if (wt.type === 'shan_response') {
-              if (humanPlayer.hero.id === 'guanyu') clickable = (card.type === 'shan' || isRedSuit(card.suit));
-              else clickable = (card.type === 'shan');
-            }
-            else if (wt.type === 'juedou_defend' || wt.type === 'juedou_defend_second') {
-              if (humanPlayer.hero.id === 'guanyu') clickable = (card.type === 'sha' || isRedSuit(card.suit));
-              else clickable = (card.type === 'sha');
-            }
-            else if (wt.type === 'aoe_response') {
-              if (humanPlayer.hero.id === 'guanyu') clickable = (card.type === wt.requiredType || isRedSuit(card.suit));
-              else clickable = (card.type === wt.requiredType);
-            }
-            else if (wt.type === 'dying') {
-              clickable = (card.type === 'tao') || (card.type === 'jiu') || (wt.huatuoJijiu && isRedSuit(card.suit));
-            }
-            else if (wt.type === 'huogong_show') {
-              clickable = player.isHuman && wt.target.id === player.id;
-            }
-            else if (wt.type === 'huogong_discard') {
-              clickable = player.isHuman && wt.source.id === player.id && card.suit === wt.suit;
-            }
-            else if (wt.type === 'discard_phase' || wt.type === 'jieyin_discard' || wt.type === 'yeyan_discard'
-              || wt.type === 'fangzhu_discard' || wt.type === 'guohe_discard' || wt.type === 'shunshou_steal') {
-              clickable = true;
-            }
-            else if (wt.type) clickable = false;
-          }
-
-          if (!isHumanTurn && !this.waitingForTarget) clickable = false;
-          if (this.autoPlay && !this.waitingForTarget) clickable = false;
-
-          const suitColor = isRedSuit(card.suit) ? 'card-suit-red' : 'card-suit-black';
-          html += `<div class="card ${cardClass} ${clickable ? '' : 'disabled'}"
-            onclick="game.handleCardClick(${i})">
-            <div class="card-top"><span class="card-suit-num ${suitColor}">${card.suit}${this.getNumberStr(card.number)}</span></div>
-            <div class="card-icon">${card.icon}</div>
-            <div class="card-name-text">${card.name}</div>
-            <div class="card-num-bot ${suitColor}">${card.suit}${this.getNumberStr(card.number)}</div>
-          </div>`;
-        }
-        if (humanPlayer.hand.length === 0) {
-          html += '<div style="color:#604020;padding:12px;width:100%;text-align:center;">暂无手牌</div>';
-        }
-        html += '</div>'; // close human-hand-inline
-
-        // 人类装备区
-        html += '<div style="display:flex;gap:6px;justify-content:center;margin-top:4px;flex-wrap:wrap;">';
-        const equipSlots = [
-          { slot: 'weapon', label: '武器', cls: 'wpn' },
-          { slot: 'armor', label: '防具', cls: 'armr' },
-          { slot: 'plusHorse', label: '+1马', cls: 'p1h' },
-          { slot: 'minusHorse', label: '-1马', cls: 'm1h' },
-        ];
-        for (const { slot, label, cls } of equipSlots) {
-          const eq = humanPlayer.equipment[slot];
-          const eqName = eq ? eq.name : '(空)';
-          html += `<div class="equip-zone"><div class="equip-zone-label">${label}</div>
-            <div class="equip-slot ${eq ? 'occupied ' + cls : ''}">${eqName}</div></div>`;
-        }
-        html += '</div>';
-      }
+      // 人类手牌与装备已移至桌面底部托盘（seat-table 之后渲染，不参与环形定位）
 
       html += '</div>'; // close player-slot
     }
 
-    html += '</div>'; // close players-grid
+    html += '</div>'; // close seat-table
+
+    // 人类专属底部操作托盘（不参与环形定位，桌面底部独立横条）
+    if (humanPlayer && humanPlayer.alive) {
+      html += '<div class="human-tray">';
+      html += '<div class="human-hand-inline">';
+      html += '<div class="hand-label-inline"><span>手牌 (' + humanPlayer.hand.length + '张) ' + (this.autoPlay ? '<span style="color:#60ff80;">🤖托管中</span>' : '') + '</span>';
+
+      if (this.waitingForTarget?.type === 'discard_phase') {
+        const wt = this.waitingForTarget;
+        html += '<span style="color:#ff6060;">弃 ' + wt.needDiscard + ' 张 (已选 ' + wt.selected.length + ')</span>';
+      }
+      if (this.waitingForTarget?.type === 'jieyin_discard') {
+        const wt = this.waitingForTarget;
+        html += '<span style="color:#ffe080;">结姻选牌 (已选 ' + wt.selected.length + ')</span>';
+      }
+      if (this.waitingForTarget?.type === 'yeyan_discard') {
+        const wt = this.waitingForTarget;
+        html += '<span style="color:#ffa040;">业炎选牌 (已选 ' + wt.selected.length + ')</span>';
+      }
+      html += '</div>'; // close hand-label-inline
+
+      for (let i = 0; i < humanPlayer.hand.length; i++) {
+        const card = humanPlayer.hand[i];
+        const isSelected = this.selectedCardIdx === i;
+        const isDiscardSelected = this.waitingForTarget?.selected?.includes(i);
+        let cardClass = this.getCardStyle(card);
+        if (isSelected || isDiscardSelected) cardClass += ' selected';
+        if (isHumanTurn && humanPlayer.hero.id === 'guanyu' && card.type !== 'sha' && isRedSuit(card.suit)
+            && this.phase === 'play' && !this.waitingForTarget && !this.autoPlay) {
+          cardClass += ' wusheng-able';
+        }
+        let clickable = true;
+
+        if (this.waitingForTarget) {
+          const wt = this.waitingForTarget;
+          if (wt.type === 'shan_response') {
+            if (humanPlayer.hero.id === 'guanyu') clickable = (card.type === 'shan' || isRedSuit(card.suit));
+            else clickable = (card.type === 'shan');
+          }
+          else if (wt.type === 'juedou_defend' || wt.type === 'juedou_defend_second') {
+            if (humanPlayer.hero.id === 'guanyu') clickable = (card.type === 'sha' || isRedSuit(card.suit));
+            else clickable = (card.type === 'sha');
+          }
+          else if (wt.type === 'aoe_response') {
+            if (humanPlayer.hero.id === 'guanyu') clickable = (card.type === wt.requiredType || isRedSuit(card.suit));
+            else clickable = (card.type === wt.requiredType);
+          }
+          else if (wt.type === 'dying') {
+            clickable = (card.type === 'tao') || (card.type === 'jiu') || (wt.huatuoJijiu && isRedSuit(card.suit));
+          }
+          else if (wt.type === 'huogong_show') {
+            clickable = humanPlayer.isHuman && wt.target.id === humanPlayer.id;
+          }
+          else if (wt.type === 'huogong_discard') {
+            clickable = humanPlayer.isHuman && wt.source.id === humanPlayer.id && card.suit === wt.suit;
+          }
+          else if (wt.type === 'discard_phase' || wt.type === 'jieyin_discard' || wt.type === 'yeyan_discard'
+            || wt.type === 'fangzhu_discard' || wt.type === 'guohe_discard' || wt.type === 'shunshou_steal') {
+            clickable = true;
+          }
+          else if (wt.type) clickable = false;
+        }
+
+        if (!isHumanTurn && !this.waitingForTarget) clickable = false;
+        if (this.autoPlay && !this.waitingForTarget) clickable = false;
+
+        const suitColor = isRedSuit(card.suit) ? 'card-suit-red' : 'card-suit-black';
+        html += '<div class="card ' + cardClass + ' ' + (clickable ? '' : 'disabled') + '"'
+          + ' onclick="game.handleCardClick(' + i + ')">'
+          + '<div class="card-top"><span class="card-suit-num ' + suitColor + '">' + card.suit + this.getNumberStr(card.number) + '</span></div>'
+          + '<div class="card-icon">' + card.icon + '</div>'
+          + '<div class="card-name-text">' + card.name + '</div>'
+          + '<div class="card-num-bot ' + suitColor + '">' + card.suit + this.getNumberStr(card.number) + '</div>'
+          + '</div>';
+      }
+      if (humanPlayer.hand.length === 0) {
+        html += '<div style="color:#604020;padding:12px;width:100%;text-align:center;">暂无手牌</div>';
+      }
+      html += '</div>'; // close human-hand-inline
+
+      // 人类装备区
+      html += '<div style="display:flex;gap:6px;justify-content:center;margin-top:4px;flex-wrap:wrap;">';
+      const equipSlots = [
+        { slot: 'weapon', label: '武器', cls: 'wpn' },
+        { slot: 'armor', label: '防具', cls: 'armr' },
+        { slot: 'plusHorse', label: '+1马', cls: 'p1h' },
+        { slot: 'minusHorse', label: '-1马', cls: 'm1h' },
+      ];
+      for (const { slot, label, cls } of equipSlots) {
+        const eq = humanPlayer.equipment[slot];
+        const eqName = eq ? eq.name : '(空)';
+        html += '<div class="equip-zone"><div class="equip-zone-label">' + label + '</div>'
+          + '<div class="equip-slot ' + (eq ? 'occupied ' + cls : '') + '">' + eqName + '</div></div>';
+      }
+      html += '</div>';
+      html += '</div>'; // close human-tray
+    }
 
     // 响应提示
     if (this.waitingForTarget && !this.autoPlay) {

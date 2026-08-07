@@ -72,26 +72,53 @@ body::before {
   box-shadow: 0 3px 10px rgba(0,0,0,0.5);
 }
 
-/* 玩家网格 */
-.players-grid {
-  display: grid; gap: 14px;
-  justify-content: center;
+/* ========== 椭圆环形桌位 ========== */
+.seat-table {
+  position: relative;
+  width: 100%; max-width: 1040px; margin: 0 auto;
+  aspect-ratio: 13 / 10; min-height: 600px;
+  border-radius: 28px;
+  background:
+    radial-gradient(ellipse at center, rgba(70,38,14,0.55) 0%, rgba(34,18,7,0.35) 55%, rgba(12,6,2,0.12) 78%),
+    repeating-radial-gradient(circle at center, rgba(255,220,160,0.035) 0px, rgba(255,220,160,0.035) 1px, transparent 1px, transparent 28px);
+  border: 1px solid rgba(140,92,32,0.3);
+  box-shadow: inset 0 0 60px rgba(0,0,0,0.55), 0 8px 30px rgba(0,0,0,0.4);
 }
-/* 自适应列数：5-8人用多列 */
-.players-grid.cols-2 { grid-template-columns: repeat(2, 1fr); }
-.players-grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
-.players-grid.cols-4 { grid-template-columns: repeat(4, 1fr); }
-
-/* 单个玩家槽位 */
+/* 桌心：牌堆 + 出牌流向 */
+.table-center {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 10px; z-index: 2; text-align: center; pointer-events: none;
+}
+.table-ring-hint {
+  font-size: 12px; color: rgba(240,208,96,0.55); letter-spacing: 3px;
+  margin-top: 4px; opacity: 0.85;
+}
+/* 单个玩家槽位（百分比极坐标定位，GPU 合成层，零重排） */
 .player-slot {
+  position: absolute;
+  left: calc(50% + var(--x, 0%));
+  top: calc(50% + var(--y, 0%));
+  transform: translate(-50%, -50%);
+  width: 200px;
   display: flex; flex-direction: column; align-items: center; gap: 6px;
-  padding: 10px; background: rgba(0,0,0,0.25); border-radius: 14px;
-  border: 1px solid rgba(74,48,16,0.3);
-  transition: all 0.3s;
+  padding: 10px; background: rgba(0,0,0,0.3); border-radius: 14px;
+  border: 1px solid rgba(74,48,16,0.4);
+  transition: transform 0.25s ease, box-shadow 0.3s ease;
+  z-index: 3;
 }
 .player-slot.has-human {
-  background: rgba(224,160,40,0.08); border-color: rgba(224,160,40,0.4);
-  box-shadow: 0 0 20px rgba(224,160,40,0.15);
+  background: rgba(224,160,40,0.1); border-color: rgba(224,160,40,0.45);
+  box-shadow: 0 0 22px rgba(224,160,40,0.18);
+  z-index: 4;
+}
+.player-slot:hover { box-shadow: 0 0 18px rgba(240,208,96,0.25); }
+/* 人类专属底部操作托盘（不参与环形定位） */
+.human-tray {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 14px 16px; margin-top: 14px;
+  background: rgba(0,0,0,0.3); border: 1px solid rgba(224,160,40,0.25);
+  border-radius: 16px; box-shadow: 0 6px 24px rgba(0,0,0,0.45);
 }
 /* 手牌展示区（AI背面/可见） */
 .player-hand-row {
@@ -432,7 +459,19 @@ body::before {
   .table-logo { font-size: 20px; }
   .top-bar h1 { font-size: 16px; }
   .seat-badge { width: 22px; height: 22px; font-size: 10px; }
-  .players-grid { gap: 10px; }
+  .seat-table {
+    position: static; aspect-ratio: auto; min-height: 0; max-width: 100%;
+    background: none; border: none; box-shadow: none;
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px;
+  }
+  .table-center {
+    position: static; transform: none; grid-column: 1 / -1;
+    flex-direction: row; gap: 14px; pointer-events: auto; padding: 8px 0;
+  }
+  .player-slot {
+    position: static; left: auto; top: auto; transform: none;
+    width: auto; max-width: 260px; margin: 0 auto;
+  }
   .game-board { padding: 12px 10px; }
 }
 @media (max-width: 550px) {
