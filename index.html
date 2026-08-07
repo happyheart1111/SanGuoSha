@@ -47,54 +47,67 @@ body::before {
 }
 .deck-count { font-size: 13px; font-weight: bold; color: #f0d060; }
 
-/* ========== 环形牌桌 ========== */
-.game-table {
-  position: relative; width: 100%; height: 78vh; min-height: 540px;
-  margin: 0 auto; overflow: visible;
-  background: 
-    radial-gradient(ellipse at center, rgba(40,20,8,0.5) 0%, transparent 70%);
+/* ========== 平铺牌局 ========== */
+.game-board {
+  display: flex; flex-direction: column; gap: 14px;
+  padding: 16px 20px;
+  background: radial-gradient(ellipse at center, rgba(40,20,8,0.4) 0%, transparent 70%);
   border-radius: 20px;
+  min-height: 300px;
 }
-.table-center {
-  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
-  width: 210px; height: 210px; border-radius: 50%;
-  background: 
-    radial-gradient(circle at 45% 38%, #524028 0%, #2e1c0e 50%, #1a0e04 100%);
-  border: 5px solid #7a4a18; 
-  box-shadow: 
-    0 0 8px #5a3510, 0 0 40px rgba(0,0,0,0.6), 
-    inset 0 0 50px rgba(0,0,0,0.5), inset 0 2px 0 rgba(255,220,160,0.04);
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  z-index: 2; pointer-events: none;
-}
-.table-center::before {
-  content: ''; position: absolute; width: 175px; height: 175px; border-radius: 50%;
-  border: 3px solid rgba(122,74,24,0.35);
-}
-.table-center::after {
-  content: ''; position: absolute; width: 140px; height: 140px; border-radius: 50%;
-  border: 2px solid rgba(122,74,24,0.2);
+/* 牌堆信息条 */
+.table-deck-bar {
+  display: flex; justify-content: center; align-items: center; gap: 16px;
+  padding: 10px 24px;
+  background: rgba(0,0,0,0.45); border: 1px solid #4a3010; border-radius: 12px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.4);
 }
 .table-logo { 
-  font-size: 34px; color: rgba(240,208,96,0.25); font-weight: bold; 
+  font-size: 28px; color: rgba(240,208,96,0.4); font-weight: bold; 
   letter-spacing: 5px; text-shadow: 0 2px 6px rgba(0,0,0,0.5);
 }
-.table-deck-info { font-size: 11px; color: #988060; margin-top: 10px; text-align: center; line-height: 1.5; }
+.table-deck-info { font-size: 12px; color: #a08060; text-align: center; line-height: 1.5; }
+.deck-visual-bar {
+  width: 44px; height: 60px; background: linear-gradient(145deg, #1e3e62, #2c5e94);
+  border: 2px solid #8b6914; border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; color: #f0d060;
+  box-shadow: 0 3px 10px rgba(0,0,0,0.5);
+}
+
+/* 玩家网格 */
+.players-grid {
+  display: grid; gap: 14px;
+  justify-content: center;
+}
+/* 自适应列数：5-8人用多列 */
+.players-grid.cols-2 { grid-template-columns: repeat(2, 1fr); }
+.players-grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
+.players-grid.cols-4 { grid-template-columns: repeat(4, 1fr); }
+
+/* 单个玩家槽位 */
+.player-slot {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 10px; background: rgba(0,0,0,0.25); border-radius: 14px;
+  border: 1px solid rgba(74,48,16,0.3);
+  transition: all 0.3s;
+}
+.player-slot.has-human {
+  background: rgba(224,160,40,0.08); border-color: rgba(224,160,40,0.4);
+  box-shadow: 0 0 20px rgba(224,160,40,0.15);
+}
+/* 手牌展示区（AI背面/可见） */
+.player-hand-row {
+  display: flex; gap: 3px; flex-wrap: wrap; justify-content: center;
+  min-height: 24px; padding: 4px 8px;
+  background: rgba(0,0,0,0.3); border-radius: 8px;
+}
 
 /* ========== 英雄面板 (三国杀卡牌风) ========== */
-.hero-panel-wrapper {
-  z-index: 10;
-}
-/* 面板装饰线 - 顶边金色饰条 */
-.hero-panel-wrapper::after {
-  content: ''; position: absolute; top: -3px; left: 50%; transform: translateX(-50%);
-  width: 40px; height: 3px; background: rgba(240,208,96,0.4); border-radius: 2px;
-  pointer-events: none; z-index: 20;
-}
 .hero-panel {
   background: linear-gradient(172deg, rgba(30,14,6,0.95), rgba(44,22,9,0.97), rgba(20,8,2,0.96));
   border: 2px solid #5c3610; border-radius: 14px; padding: 10px 10px 8px;
-  width: 195px; position: relative;
+  width: 100%; max-width: 240px; position: relative;
   box-shadow: 0 4px 22px rgba(0,0,0,0.65), inset 0 1px 0 rgba(255,220,160,0.04);
   transition: all 0.3s ease;
 }
@@ -110,7 +123,6 @@ body::before {
 .hero-panel.dead { opacity: 0.35; filter: grayscale(0.85); }
 .hero-panel.human-panel { 
   border-color: #e0a028; border-width: 3px; 
-  width: 215px;
   box-shadow: 0 4px 28px rgba(224,160,40,0.3), 0 4px 22px rgba(0,0,0,0.5);
 }
 @keyframes panelGlow {
@@ -241,25 +253,19 @@ body::before {
   content: '?'; color: rgba(200,180,140,0.5); font-size: 14px; font-weight: bold;
 }
 
-/* ========== 人类手牌区 (底部) ========== */
-.human-area {
-  position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
-  display: flex; flex-direction: column; align-items: center; z-index: 15;
-  max-width: 96%;
-}
-.human-area .hero-panel-wrapper::after { display: none; }
-.hand-cards-area { margin-top: 8px; }
-.hand-label { 
-  font-size: 12px; color: #c8a868; margin-bottom: 8px; 
-  display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px;
-  font-weight: bold;
-}
-.hand-cards {
+/* ========== 人类手牌区 (在网格槽位内) ========== */
+.human-hand-inline {
   display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;
-  min-height: 110px; padding: 14px; 
-  background: rgba(0,0,0,0.45); border-radius: 14px;
-  border: 1px solid rgba(139,105,20,0.2);
+  padding: 10px;
+  background: rgba(0,0,0,0.45); border-radius: 12px;
+  border: 1px solid rgba(139,105,20,0.25);
   box-shadow: 0 2px 16px rgba(0,0,0,0.4);
+  min-height: 80px;
+}
+.hand-label-inline { 
+  width: 100%; font-size: 12px; color: #c8a868; 
+  display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px;
+  font-weight: bold; margin-bottom: 4px;
 }
 
 /* ========== 精致卡牌 ========== */
@@ -360,10 +366,10 @@ body::before {
 
 /* ========== 日志区 ========== */
 .log-area {
-  position: absolute; bottom: 10px; right: 16px; max-height: 110px; max-width: 340px; overflow-y: auto;
-  background: rgba(0,0,0,0.6); border: 1px solid #4a3010; border-radius: 10px;
+  position: fixed; bottom: 10px; right: 16px; max-height: 130px; max-width: 360px; overflow-y: auto;
+  background: rgba(0,0,0,0.75); border: 1px solid #4a3010; border-radius: 10px;
   padding: 10px; font-size: 11px; color: #a08050; z-index: 5;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.4);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5);
 }
 .log-entry { padding: 2px 0; border-bottom: 1px solid rgba(74,48,16,0.25); }
 .log-entry:last-child { border-bottom: none; }
@@ -412,33 +418,26 @@ body::before {
 
 /* ========== 响应式 ========== */
 @media (max-width: 1100px) {
-  .hero-panel { width: 170px; padding: 8px; }
-  .hero-panel.human-panel { width: 190px; }
+  .hero-panel { max-width: 210px; }
   .hero-avatar { width: 42px; height: 42px; font-size: 20px; }
   .hero-name { font-size: 13px; }
-  .game-table { height: 72vh; min-height: 480px; }
 }
-@media (max-width: 800px) {
-  .game-table { height: 65vh; min-height: 420px; }
-  .hero-panel { width: 140px; padding: 6px; }
-  .hero-panel.human-panel { width: 160px; }
+@media (max-width: 850px) {
+  .hero-panel { max-width: 180px; padding: 7px; }
   .hero-avatar { width: 34px; height: 34px; font-size: 16px; }
   .hero-name { font-size: 11px; }
   .hero-title { font-size: 8px; }
   .card { width: 56px; height: 80px; }
   .card-name-text { font-size: 9px; }
   .card-icon { font-size: 17px; }
-  .table-center { width: 140px; height: 140px; }
-  .table-center::before { width: 115px; height: 115px; }
-  .table-center::after { width: 95px; height: 95px; }
-  .table-logo { font-size: 22px; }
+  .table-logo { font-size: 20px; }
   .top-bar h1 { font-size: 16px; }
   .seat-badge { width: 22px; height: 22px; font-size: 10px; }
-  .seat-badge.human { font-size: 11px; }
+  .players-grid { gap: 10px; }
+  .game-board { padding: 12px 10px; }
 }
 @media (max-width: 550px) {
-  .hero-panel { width: 110px; padding: 5px; }
-  .hero-panel.human-panel { width: 125px; }
+  .hero-panel { max-width: 150px; padding: 5px; }
   .hero-avatar { width: 28px; height: 28px; font-size: 13px; }
   .hero-name { font-size: 10px; }
   .hero-title { font-size: 7px; }
@@ -446,10 +445,10 @@ body::before {
   .card-name-text { font-size: 8px; }
   .card-icon { font-size: 14px; }
   .card-suit-num { font-size: 8px; }
-  .table-center { width: 90px; height: 90px; }
-  .table-center::before { width: 75px; height: 75px; }
-  .table-center::after { width: 60px; height: 60px; }
-  .table-logo { font-size: 18px; }
+  .table-logo { font-size: 16px; }
+  .players-grid { gap: 6px; }
+  .player-slot { padding: 6px; }
+  .game-board { padding: 8px 4px; gap: 8px; }
 }
 </style>
 </head>
@@ -618,32 +617,15 @@ class Game {
     this.startCurrentTurn();
   }
 
-  // 随机分配座位号
+  // 随机分配座位号（所有玩家随机入座）
   assignSeats() {
     const n = this.players.length;
-    // 人类固定 0 号（底部），AI 随机分配 1~n-1
-    const aiSeats = [];
-    for (let s = 1; s < n; s++) aiSeats.push(s);
-    this.shuffle(aiSeats);
-    let aiIdx = 0;
-    for (const p of this.players) {
-      p.seat = p.isHuman ? 0 : aiSeats[aiIdx++];
+    const seats = [];
+    for (let s = 0; s < n; s++) seats.push(s);
+    this.shuffle(seats);
+    for (let i = 0; i < n; i++) {
+      this.players[i].seat = seats[i];
     }
-  }
-
-  // 计算环形百分比坐标：AI 围绕完整圆形，底部留给人类
-  getCircularPos(seat, totalSeats) {
-    // seat: AI 座位号 (1 ~ totalSeats-1), totalSeats 含人类
-    const numInCircle = totalSeats - 1;
-    const baseAngle = -Math.PI / 2; // 从12点钟顺时针排
-    const step = (2 * Math.PI) / numInCircle;
-    const idx = seat - 1;
-    const angle = baseAngle + idx * step;
-    const rx = 40; const ry = 40; // 百分比半径，适配所有屏幕
-    return {
-      left: (50 + rx * Math.cos(angle)).toFixed(2) + '%',
-      top: (50 + ry * Math.sin(angle)).toFixed(2) + '%'
-    };
   }
 
   initDeck() {
@@ -2073,26 +2055,37 @@ class Game {
       </div>
     </div>`;
 
-    // 环形牌桌
-    html += '<div class="game-table">';
+    // 平铺牌局
+    const totalPlayers = this.players.length;
+    let cols = 2;
+    if (totalPlayers >= 7) cols = 4;
+    else if (totalPlayers >= 5) cols = 3;
+    else if (totalPlayers >= 3) cols = 2;
+    else cols = 1;
 
-    // 桌心
-    html += `<div class="table-center">
-      <div class="table-logo">殺</div>
-      <div class="table-deck-info">牌堆 ${this.deck.length}<br>弃牌 ${this.discardPile.length}</div>
+    html += '<div class="game-board">';
+
+    // 牌堆信息条
+    html += `<div class="table-deck-bar">
+      <div class="deck-visual-bar">牌堆</div>
+      <span class="table-deck-info">牌堆 ${this.deck.length} 张 | 弃牌 ${this.discardPile.length} 张</span>
+      <div style="font-size:28px;color:rgba(240,208,96,0.3);font-weight:bold;letter-spacing:5px;">殺</div>
     </div>`;
 
-    const totalSeats = this.players.length;
+    // 玩家网格（按座位号排序展示所有玩家）
+    const sortedPlayers = [...this.players].sort((a, b) => a.seat - b.seat);
+    html += `<div class="players-grid cols-${cols}">`;
 
-    // AI 对手环形分布（百分比定位，适配任何屏幕）
-    const aiPlayers = this.players.filter(p => !p.isHuman);
-    for (const p of aiPlayers) {
-      const pos = this.getCircularPos(p.seat, totalSeats);
-      html += `<div class="hero-panel-wrapper" style="position:absolute;left:${pos.left};top:${pos.top};transform:translate(-50%,-50%);">`;
-      html += this.renderHeroPanel(p, false, p.seat);
-      // AI 手牌显示（卡背或可见状态）
-      if (p.hand.length > 0) {
-        html += '<div style="display:flex;gap:2px;justify-content:center;margin-top:4px;">';
+    for (const p of sortedPlayers) {
+      const isHuman = p.isHuman;
+      html += `<div class="player-slot ${isHuman ? 'has-human' : ''}">`;
+
+      // 英雄面板
+      html += this.renderHeroPanel(p, isHuman, p.seat);
+
+      // AI 手牌（卡背或可见状态）
+      if (!isHuman && p.hand.length > 0) {
+        html += '<div class="player-hand-row">';
         for (let i = 0; i < p.hand.length; i++) {
           const card = p.hand[i];
           const isRevealed = this.waitingForTarget && !this.autoPlay &&
@@ -2106,104 +2099,100 @@ class Game {
         }
         html += '</div>';
       }
-      html += '</div>';
-    }
 
-    // 人类玩家 (底部)
-    if (humanPlayer.alive) {
-      html += '<div class="human-area">';
-      html += this.renderHeroPanel(humanPlayer, true, humanPlayer.seat);
+      // 人类玩家手牌（在网格槽位内）
+      if (isHuman && humanPlayer.alive) {
+        html += '<div class="human-hand-inline">';
+        html += `<div class="hand-label-inline"><span>手牌 (${humanPlayer.hand.length}张) ${this.autoPlay ? '<span style="color:#60ff80;">🤖托管中</span>' : ''}</span>`;
 
-      html += '<div class="hand-cards-area">';
-      html += `<div class="hand-label"><span>你的手牌 (${humanPlayer.hand.length}张) ${this.autoPlay ? '<span style="color:#60ff80;">🤖托管中</span>' : ''}</span>`;
-
-      if (this.waitingForTarget?.type === 'discard_phase') {
-        const wt = this.waitingForTarget;
-        html += `<span style="color:#ff6060;">请选择 ${wt.needDiscard} 张牌弃置 (已选 ${wt.selected.length})</span>`;
-      }
-      if (this.waitingForTarget?.type === 'jieyin_discard') {
-        const wt = this.waitingForTarget;
-        html += `<span style="color:#ffe080;">请选择2张牌发动【结姻】(已选 ${wt.selected.length})</span>`;
-      }
-      if (this.waitingForTarget?.type === 'yeyan_discard') {
-        const wt = this.waitingForTarget;
-        html += `<span style="color:#ffa040;">请选择3张牌发动【业炎】(已选 ${wt.selected.length})</span>`;
-      }
-      html += '</div>';
-
-      html += '<div class="hand-cards">';
-      for (let i = 0; i < humanPlayer.hand.length; i++) {
-        const card = humanPlayer.hand[i];
-        const isSelected = this.selectedCardIdx === i;
-        const isDiscardSelected = this.waitingForTarget?.selected?.includes(i);
-        let cardClass = this.getCardStyle(card);
-        if (isSelected || isDiscardSelected) cardClass += ' selected';
-        // 关羽武圣
-        if (isHumanTurn && humanPlayer.hero.id === 'guanyu' && card.type !== 'sha' && isRedSuit(card.suit)
-            && this.phase === 'play' && !this.waitingForTarget && !this.autoPlay) {
-          cardClass += ' wusheng-able';
-        }
-        let clickable = true;
-
-        if (this.waitingForTarget) {
+        if (this.waitingForTarget?.type === 'discard_phase') {
           const wt = this.waitingForTarget;
-          if (wt.type === 'shan_response') {
-            if (humanPlayer.hero.id === 'guanyu') clickable = (card.type === 'shan' || isRedSuit(card.suit));
-            else clickable = (card.type === 'shan');
-          }
-          else if (wt.type === 'juedou_defend' || wt.type === 'juedou_defend_second') {
-            if (humanPlayer.hero.id === 'guanyu') clickable = (card.type === 'sha' || isRedSuit(card.suit));
-            else clickable = (card.type === 'sha');
-          }
-          else if (wt.type === 'aoe_response') {
-            if (humanPlayer.hero.id === 'guanyu') clickable = (card.type === wt.requiredType || isRedSuit(card.suit));
-            else clickable = (card.type === wt.requiredType);
-          }
-          else if (wt.type === 'dying') {
-            clickable = (card.type === 'tao') || (wt.huatuoJijiu && isRedSuit(card.suit));
-          }
-          else if (wt.type === 'discard_phase' || wt.type === 'jieyin_discard' || wt.type === 'yeyan_discard'
-            || wt.type === 'fangzhu_discard' || wt.type === 'guohe_discard' || wt.type === 'shunshou_steal') {
-            clickable = true;
-          }
-          else if (wt.type) clickable = false;
+          html += `<span style="color:#ff6060;">弃 ${wt.needDiscard} 张 (已选 ${wt.selected.length})</span>`;
         }
+        if (this.waitingForTarget?.type === 'jieyin_discard') {
+          const wt = this.waitingForTarget;
+          html += `<span style="color:#ffe080;">结姻选牌 (已选 ${wt.selected.length})</span>`;
+        }
+        if (this.waitingForTarget?.type === 'yeyan_discard') {
+          const wt = this.waitingForTarget;
+          html += `<span style="color:#ffa040;">业炎选牌 (已选 ${wt.selected.length})</span>`;
+        }
+        html += '</div>'; // close hand-label-inline
 
-        if (!isHumanTurn && !this.waitingForTarget) clickable = false;
-        if (this.autoPlay && !this.waitingForTarget) clickable = false;
+        for (let i = 0; i < humanPlayer.hand.length; i++) {
+          const card = humanPlayer.hand[i];
+          const isSelected = this.selectedCardIdx === i;
+          const isDiscardSelected = this.waitingForTarget?.selected?.includes(i);
+          let cardClass = this.getCardStyle(card);
+          if (isSelected || isDiscardSelected) cardClass += ' selected';
+          if (isHumanTurn && humanPlayer.hero.id === 'guanyu' && card.type !== 'sha' && isRedSuit(card.suit)
+              && this.phase === 'play' && !this.waitingForTarget && !this.autoPlay) {
+            cardClass += ' wusheng-able';
+          }
+          let clickable = true;
 
-        const suitColor = isRedSuit(card.suit) ? 'card-suit-red' : 'card-suit-black';
-        html += `<div class="card ${cardClass} ${clickable ? '' : 'disabled'}"
-          onclick="game.handleCardClick(${i})">
-          <div class="card-top"><span class="card-suit-num ${suitColor}">${card.suit}${this.getNumberStr(card.number)}</span></div>
-          <div class="card-icon">${card.icon}</div>
-          <div class="card-name-text">${card.name}</div>
-          <div class="card-num-bot ${suitColor}">${card.suit}${this.getNumberStr(card.number)}</div>
-        </div>`;
+          if (this.waitingForTarget) {
+            const wt = this.waitingForTarget;
+            if (wt.type === 'shan_response') {
+              if (humanPlayer.hero.id === 'guanyu') clickable = (card.type === 'shan' || isRedSuit(card.suit));
+              else clickable = (card.type === 'shan');
+            }
+            else if (wt.type === 'juedou_defend' || wt.type === 'juedou_defend_second') {
+              if (humanPlayer.hero.id === 'guanyu') clickable = (card.type === 'sha' || isRedSuit(card.suit));
+              else clickable = (card.type === 'sha');
+            }
+            else if (wt.type === 'aoe_response') {
+              if (humanPlayer.hero.id === 'guanyu') clickable = (card.type === wt.requiredType || isRedSuit(card.suit));
+              else clickable = (card.type === wt.requiredType);
+            }
+            else if (wt.type === 'dying') {
+              clickable = (card.type === 'tao') || (wt.huatuoJijiu && isRedSuit(card.suit));
+            }
+            else if (wt.type === 'discard_phase' || wt.type === 'jieyin_discard' || wt.type === 'yeyan_discard'
+              || wt.type === 'fangzhu_discard' || wt.type === 'guohe_discard' || wt.type === 'shunshou_steal') {
+              clickable = true;
+            }
+            else if (wt.type) clickable = false;
+          }
+
+          if (!isHumanTurn && !this.waitingForTarget) clickable = false;
+          if (this.autoPlay && !this.waitingForTarget) clickable = false;
+
+          const suitColor = isRedSuit(card.suit) ? 'card-suit-red' : 'card-suit-black';
+          html += `<div class="card ${cardClass} ${clickable ? '' : 'disabled'}"
+            onclick="game.handleCardClick(${i})">
+            <div class="card-top"><span class="card-suit-num ${suitColor}">${card.suit}${this.getNumberStr(card.number)}</span></div>
+            <div class="card-icon">${card.icon}</div>
+            <div class="card-name-text">${card.name}</div>
+            <div class="card-num-bot ${suitColor}">${card.suit}${this.getNumberStr(card.number)}</div>
+          </div>`;
+        }
+        if (humanPlayer.hand.length === 0) {
+          html += '<div style="color:#604020;padding:12px;width:100%;text-align:center;">暂无手牌</div>';
+        }
+        html += '</div>'; // close human-hand-inline
+
+        // 人类装备区
+        html += '<div style="display:flex;gap:6px;justify-content:center;margin-top:4px;flex-wrap:wrap;">';
+        const equipSlots = [
+          { slot: 'weapon', label: '武器', cls: 'wpn' },
+          { slot: 'armor', label: '防具', cls: 'armr' },
+          { slot: 'plusHorse', label: '+1马', cls: 'p1h' },
+          { slot: 'minusHorse', label: '-1马', cls: 'm1h' },
+        ];
+        for (const { slot, label, cls } of equipSlots) {
+          const eq = humanPlayer.equipment[slot];
+          const eqName = eq ? eq.name : '(空)';
+          html += `<div class="equip-zone"><div class="equip-zone-label">${label}</div>
+            <div class="equip-slot ${eq ? 'occupied ' + cls : ''}">${eqName}</div></div>`;
+        }
+        html += '</div>';
       }
-      if (humanPlayer.hand.length === 0) {
-        html += '<div style="color:#604020;padding:20px;">暂无手牌</div>';
-      }
-      html += '</div>'; // close hand-cards
 
-      // 人类装备区
-      html += '<div style="display:flex;gap:6px;justify-content:center;margin-top:6px;">';
-      const equipSlots = [
-        { slot: 'weapon', label: '武器', cls: 'wpn' },
-        { slot: 'armor', label: '防具', cls: 'armr' },
-        { slot: 'plusHorse', label: '+1马', cls: 'p1h' },
-        { slot: 'minusHorse', label: '-1马', cls: 'm1h' },
-      ];
-      for (const { slot, label, cls } of equipSlots) {
-        const eq = humanPlayer.equipment[slot];
-        const eqName = eq ? eq.name : '(空)';
-        html += `<div class="equip-zone"><div class="equip-zone-label">${label}</div>
-          <div class="equip-slot ${eq ? 'occupied ' + cls : ''}">${eqName}</div></div>`;
-      }
-      html += '</div>';
-
-      html += '</div></div>'; // close hand-cards-area, human-area
+      html += '</div>'; // close player-slot
     }
+
+    html += '</div>'; // close players-grid
 
     // 响应提示
     if (this.waitingForTarget && !this.autoPlay) {
@@ -2320,7 +2309,7 @@ class Game {
       html += '</div>';
     }
 
-    html += '</div>'; // close game-table
+    html += '</div>'; // close game-board
 
     // 托管按钮（始终显示）
     html += '<div class="action-bar">';
