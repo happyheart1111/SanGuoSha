@@ -1231,6 +1231,7 @@ class Game {
   resolveTao(player) {
     if (player.hp < player.hero.maxHp) {
       player.hp++;
+      this.triggerVFX('heal', player.id);
       this.addLog(`${player.hero.name}回复了1点体力 (${player.hp}/${player.hero.maxHp})`, 'heal');
     } else {
       this.addLog(`${player.hero.name}体力已满，【桃】无法生效`);
@@ -1424,6 +1425,7 @@ class Game {
     const discard = matchCards[Math.floor(Math.random() * matchCards.length)];
     this.discardCard(source, discard);
     this.addLog(`${source.hero.name}弃置【${discard.name}】对${target.hero.name}造成1点火焰伤害`, 'damage');
+    this.triggerVFX('skill', source.id);
     this.dealDamage(target, source, 1);
     this.render();
   }
@@ -1792,6 +1794,8 @@ class Game {
       }
     }
     this.checkGameOver();
+    // 打击感：在受击者面板位置触发伤害环+火花+全屏红闪+震屏
+    if (target && target.alive !== undefined) this.triggerVFX('damage', target.id);
     this._pvpSyncState();
   }
 
@@ -1801,6 +1805,7 @@ class Game {
     } else {
       card.ownerId = target.id;
       target.hand.push(card);
+      this.triggerVFX('skill', target.id);
       this.addLog(`${target.hero.name}发动【奸雄】，获得了【${card.name}】`, 'skill');
     }
   }
@@ -1826,6 +1831,7 @@ class Game {
       this.waitingForTarget = { type: 'tiandu', target };
     } else {
       this.drawCard(target, 1);
+      this.triggerVFX('skill', target.id);
       this.addLog(`${target.hero.name}发动【天妒】，摸了一张牌`, 'skill');
     }
   }
@@ -1909,6 +1915,7 @@ class Game {
     if (this.deck.length === 0) return;
     const judgeCard = this.deck.pop();
     this.addLog(`${target.hero.name}发动【雷击】，判定牌为${judgeCard.suit}【${judgeCard.name}】`, 'skill');
+    this.triggerVFX('skill', target.id);
     this.discardPile.push(judgeCard);
     if (judgeCard.suit === '♠' && source.alive) {
       this.addLog(`判定结果为♠，${source.hero.name}受到1点雷电伤害！`, 'damage');
@@ -2503,6 +2510,14 @@ class Game {
     }
   }
 
+  // ==================== 打击感特效钩子（技术美术） ====================
+  // 所有瞬时特效由 vfx.js 在独立 #vfx-layer 覆盖层生成，不进入游戏 DOM，
+  // 因此不会被 _doRender 的整块 innerHTML 重建清掉或重复触发。
+  // type: 'damage' | 'heal' | 'skill'
+  triggerVFX(type, playerId) {
+    if (window.VFX) window.VFX.fire(type, playerId);
+  }
+
   addLog(msg, type = '') {
     this.logEntries.push({ msg, type });
     // 超过 150 条时批量截断，避免频繁 shift()
@@ -2922,7 +2937,7 @@ class Game {
     if (!player.alive) classes += ' dead';
     if (isHuman) classes += ' human-panel';
 
-    let html = `<div class="${classes}">`;
+    let html = `<div class="${classes}" id="hero-${player.id}">`;
     // 座位号徽章
     if (seat !== undefined && seat !== null) {
       const seatLabel = seat + 1;

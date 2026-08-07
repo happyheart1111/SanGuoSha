@@ -1,8 +1,14 @@
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body {
   font-family: "Microsoft YaHei", "微软雅黑", sans-serif;
-  background: 
-    radial-gradient(ellipse at 50% 30%, #1e3510 0%, #0f1f05 35%, #080602 100%);
+  background-color: #080602;
+  /* 底层主光晕 + 顶层细颗粒噪点（静态绘制，叠加混合，几乎零重绘成本） */
+  background-image:
+    radial-gradient(ellipse at 50% 30%, #1e3510 0%, #0f1f05 35%, #080602 100%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat, repeat;
+  background-size: cover, 180px 180px;
+  background-blend-mode: normal, overlay;
   min-height: 100vh; color: #e8d5a3; overflow-x: hidden;
 }
 body::before {
@@ -104,8 +110,8 @@ body::before {
 .hero-panel {
   background: linear-gradient(172deg, rgba(30,14,6,0.95), rgba(44,22,9,0.97), rgba(20,8,2,0.96));
   border: 2px solid #5c3610; border-radius: 14px; padding: 10px 10px 8px;
-  width: 100%; max-width: 240px; position: relative;
-  box-shadow: 0 4px 22px rgba(0,0,0,0.65), inset 0 1px 0 rgba(255,220,160,0.04);
+  width: 100%; max-width: 240px; position: relative; isolation: isolate;
+  box-shadow: 0 4px 22px rgba(0,0,0,0.65), inset 0 1px 0 rgba(255,220,160,0.04), inset 0 0 34px rgba(0,0,0,0.32);
   transition: all 0.3s ease;
 }
 .hero-panel::before {
@@ -114,17 +120,26 @@ body::before {
 }
 .hero-panel.active-turn { 
   border-color: #e8c040;
-  box-shadow: 0 0 38px rgba(232,192,64,0.55), 0 4px 22px rgba(0,0,0,0.5);
-  animation: panelGlow 2s ease-in-out infinite; 
+  box-shadow: 0 0 22px rgba(232,192,64,0.4), 0 4px 22px rgba(0,0,0,0.5);
+}
+/* GPU 合成回合光晕：仅动 opacity / transform，不触发重绘；
+   放在面板背后（z-index:-1 + isolation 形成独立堆叠上下文），
+   光晕溢出面板边缘形成柔和外环，不影响面板内容可读性。 */
+.hero-panel.active-turn::after {
+  content: ''; position: absolute; inset: -6px; border-radius: 18px;
+  pointer-events: none; z-index: -1;
+  background: radial-gradient(ellipse at center, rgba(240,208,96,0.5), transparent 70%);
+  opacity: 0.35; animation: turnGlow 2s ease-in-out infinite;
+  will-change: opacity, transform;
+}
+@keyframes turnGlow {
+  0%, 100% { opacity: 0.3; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(1.05); }
 }
 .hero-panel.dead { opacity: 0.35; filter: grayscale(0.85); }
 .hero-panel.human-panel { 
   border-color: #e0a028; border-width: 3px; 
   box-shadow: 0 4px 28px rgba(224,160,40,0.3), 0 4px 22px rgba(0,0,0,0.5);
-}
-@keyframes panelGlow {
-  0%, 100% { box-shadow: 0 0 28px rgba(232,192,64,0.4), 0 4px 22px rgba(0,0,0,0.5); }
-  50% { box-shadow: 0 0 52px rgba(232,192,64,0.75), 0 4px 22px rgba(0,0,0,0.5); }
 }
 
 /* 座位号徽章 */
@@ -269,22 +284,26 @@ body::before {
 
 /* ========== 精致卡牌 ========== */
 .card {
-  width: 74px; height: 104px; border-radius: 7px;
+  width: 74px; height: 104px; border-radius: 7px; overflow: hidden;
   display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
   cursor: pointer; position: relative; transition: all 0.2s;
   border: 2px solid #555; user-select: none;
   text-align: center; font-weight: bold;
-  box-shadow: 0 4px 14px rgba(0,0,0,0.5);
+  box-shadow: 0 4px 14px rgba(0,0,0,0.5), inset 0 0 0 1px rgba(255,225,170,0.14), inset 0 -3px 6px rgba(0,0,0,0.4);
   padding-top: 9px;
 }
 .card::before {
   content: ''; position: absolute; top: 3px; left: 5px; right: 5px;
   height: 2px; background: rgba(255,255,255,0.06); border-radius: 2px;
 }
+/* 箔面流光：默认隐藏，悬停时以 opacity 淡入（GPU 合成、零重绘）。
+   screen 混合让这条对角高光像金属/卡膜反光一样「接住光」。 */
 .card::after {
-  content: ''; position: absolute; bottom: 3px; left: 5px; right: 5px;
-  height: 1px; background: rgba(0,0,0,0.3); border-radius: 2px;
+  content: ''; position: absolute; inset: 0; border-radius: 7px; pointer-events: none;
+  background: linear-gradient(115deg, transparent 38%, rgba(255,245,215,0.12) 47%, rgba(255,255,255,0.5) 50%, rgba(255,245,215,0.12) 53%, transparent 62%);
+  opacity: 0; transition: opacity 0.25s ease; mix-blend-mode: screen;
 }
+.card:hover:not(.disabled)::after { opacity: 1; }
 .card:hover:not(.disabled) { transform: translateY(-14px); box-shadow: 0 12px 32px rgba(0,0,0,0.65); }
 .card.selected { transform: translateY(-20px); border-color: #f0d060 !important; box-shadow: 0 0 30px rgba(240,208,96,0.7), 0 8px 20px rgba(0,0,0,0.5); }
 .card.disabled { opacity: 0.5; cursor: not-allowed; }
@@ -346,7 +365,7 @@ body::before {
   position: fixed; top: 0; left: 0; right: 0; bottom: 0;
   background: rgba(0,0,0,0.7); display: none;
   align-items: center; justify-content: center; z-index: 100;
-  backdrop-filter: blur(2px);
+  backdrop-filter: blur(1.5px);
 }
 .target-select-overlay.show { display: flex; }
 .target-hint { color: #f0d060; font-size: 18px; margin-bottom: 22px; text-align: center; font-weight: bold; text-shadow: 0 0 10px rgba(240,208,96,0.3); }
@@ -382,7 +401,7 @@ body::before {
 .skill-modal-overlay {
   position: fixed; top: 0; left: 0; right: 0; bottom: 0;
   background: rgba(0,0,0,0.78); display: flex; align-items: center;
-  justify-content: center; z-index: 200; backdrop-filter: blur(3px);
+  justify-content: center; z-index: 200; backdrop-filter: blur(2px);
 }
 .skill-modal-content {
   background: linear-gradient(175deg, #1a1015, #0d0808);
@@ -404,7 +423,7 @@ body::before {
 .modal {
   position: fixed; top: 0; left: 0; right: 0; bottom: 0;
   background: rgba(0,0,0,0.82); display: flex; align-items: center;
-  justify-content: center; z-index: 200; backdrop-filter: blur(4px);
+  justify-content: center; z-index: 200; backdrop-filter: blur(3px);
 }
 .modal-content {
   background: linear-gradient(175deg, #2a1510, #1a0a05);
@@ -499,3 +518,92 @@ body::before {
   50% { opacity: 0.3; }
 }
 .pvp-badge .dot.disconnected { background: #ff4040; animation: none; }
+
+/* ============================================================
+   VFX 打击感特效层（技术美术）
+   约定：所有动画只用 transform / opacity，走 GPU 合成；
+   节点短生命周期，由 vfx.js 在 animationend 时移除。
+   ============================================================ */
+#vfx-layer {
+  position: fixed; inset: 0; pointer-events: none; z-index: 60; overflow: hidden;
+}
+.vfx {
+  position: absolute; transform: translate(-50%, -50%);
+  will-change: transform, opacity;
+}
+
+/* —— 伤害：扩散冲击环 —— */
+.vfx-damage-ring {
+  width: 38px; height: 38px; border-radius: 50%;
+  border: 3px solid rgba(255,70,45,0.95);
+  box-shadow: 0 0 18px rgba(255,45,20,0.7);
+  animation: vfxRing 0.5s ease-out forwards;
+}
+@keyframes vfxRing {
+  0%   { opacity: 0.9; transform: translate(-50%,-50%) scale(0.4); }
+  100% { opacity: 0;   transform: translate(-50%,-50%) scale(2.4); }
+}
+
+/* —— 伤害：中心火花爆点 —— */
+.vfx-damage-spark {
+  width: 6px; height: 6px;
+  background: radial-gradient(circle, #fff 0%, rgba(255,120,60,0.95) 40%, transparent 70%);
+  box-shadow: 0 0 10px rgba(255,120,60,0.9);
+  animation: vfxSpark 0.5s ease-out forwards;
+}
+@keyframes vfxSpark {
+  0%   { opacity: 1;   transform: translate(-50%,-50%) scale(1); }
+  100% { opacity: 0;   transform: translate(-50%,-50%) scale(3.6); }
+}
+
+/* —— 治疗：绿色脉冲光晕 —— */
+.vfx-heal {
+  width: 62px; height: 62px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(130,255,150,0.55), rgba(60,220,90,0.25) 40%, transparent 70%);
+  animation: vfxHeal 0.8s ease-out forwards;
+}
+@keyframes vfxHeal {
+  0%   { opacity: 0;   transform: translate(-50%,-50%) scale(0.5); }
+  30%  { opacity: 1; }
+  100% { opacity: 0;   transform: translate(-50%,-50%) scale(1.9); }
+}
+
+/* —— 技能释放：金色光爆 —— */
+.vfx-skill {
+  width: 92px; height: 92px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(255,228,120,0.6), rgba(255,190,60,0.25) 45%, transparent 70%);
+  animation: vfxSkill 0.7s ease-out forwards;
+}
+@keyframes vfxSkill {
+  0%   { opacity: 0;   transform: translate(-50%,-50%) scale(0.3) rotate(0deg); }
+  25%  { opacity: 1; }
+  100% { opacity: 0;   transform: translate(-50%,-50%) scale(1.6) rotate(40deg); }
+}
+
+/* —— 全屏闪光（覆盖在 vfx 层内，不偏移、不居中） —— */
+.vfx-flash-damage, .vfx-flash-heal {
+  position: fixed; inset: 0; transform: none; pointer-events: none;
+}
+.vfx-flash-damage {
+  background: radial-gradient(ellipse at center, transparent 45%, rgba(220,30,20,0.35) 100%);
+  animation: vfxFlash 0.45s ease-out forwards;
+}
+.vfx-flash-heal {
+  background: radial-gradient(ellipse at center, transparent 50%, rgba(40,220,90,0.22) 100%);
+  animation: vfxFlash 0.6s ease-out forwards;
+}
+@keyframes vfxFlash {
+  0%   { opacity: 0; }
+  25%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* —— 屏幕震动（作用于 body，整屏一起抖） —— */
+.vfx-shake { animation: vfxShake 0.45s ease-in-out; }
+@keyframes vfxShake {
+  0%, 100% { transform: translate(0, 0); }
+  20% { transform: translate(-6px, 3px); }
+  40% { transform: translate(5px, -4px); }
+  60% { transform: translate(-4px, -3px); }
+  80% { transform: translate(3px, 4px); }
+}
