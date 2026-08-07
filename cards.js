@@ -77,6 +77,9 @@ const CARD_DEFS = [
     desc: '黑色【杀】对你无效' },
 ];
 
+const CARD_DEF = {};
+CARD_DEFS.forEach(c => { CARD_DEF[c.id] = c; });
+
 const DECK_COMPOSITION = [
   { cardId: 'sha', count: 20 },
   { cardId: 'shan', count: 12 },
