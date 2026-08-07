@@ -62,7 +62,7 @@ class PvPManager {
       debug: PVP_DEBUG ? 1 : 0,
     });
 
-    this.peer.on('open', (id) => {
+    this.peer.on('open', () => {
       this._status('房间创建成功！');
     });
 
@@ -203,6 +203,7 @@ class PvPManager {
         break;
 
       case 'heartbeat':
+        this._missedHeartbeats = 0;
         if (data.ack) return;
         this._send({ type: 'heartbeat', ack: true });
         break;
@@ -283,8 +284,15 @@ class PvPManager {
 
   _startHeartbeat() {
     this._stopHeartbeat();
+    this._missedHeartbeats = 0;
     this._heartbeatTimer = setInterval(() => {
       this._send({ type: 'heartbeat' });
+      this._missedHeartbeats++;
+      // 连续 6 次（30秒）没收到对端消息，判定断线
+      if (this._missedHeartbeats >= 6) {
+        if (PVP_DEBUG) console.log('[PvP] 心跳超时，对方可能已断线');
+        this._handleDisconnect();
+      }
     }, PVP_CONFIG.heartbeatInterval);
   }
 

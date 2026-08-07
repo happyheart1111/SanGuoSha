@@ -48,6 +48,10 @@ body::before {
 }
 .deck-count { font-size: 13px; font-weight: bold; color: #f0d060; }
 
+.ai-speed { font-size: 11px; color: #6ab0d0; margin-right: 10px; }
+.ai-speed.fast { color: #ffd700; animation: ai-speed-pulse 1.5s ease-in-out infinite; }
+@keyframes ai-speed-pulse { 0%,100%{opacity:0.6} 50%{opacity:1} }
+
 /* ========== 平铺牌局 ========== */
 .game-board {
   display: flex; flex-direction: column; gap: 14px;
@@ -565,6 +569,16 @@ class Game {
     this._pvpPendingJuedou = null;
     this._pvpHostHumanId = 0;
     this._pvpGuestHumanId = 1;
+    // 渲染防抖 — 合并同一帧内的多次 render() 调用
+    this._renderPending = false;
+    this._renderRafId = null;
+  }
+
+  // ========== 销毁清理 ==========
+  destroy() {
+    if (this._renderRafId) { cancelAnimationFrame(this._renderRafId); this._renderRafId = null; }
+    this._renderPending = false;
+    this.gameOver = true;
   }
   
   // ========== PvP 初始化 ==========
@@ -870,13 +884,15 @@ class Game {
     this.deck = [];
     let cardId = 0;
     for (const comp of DECK_COMPOSITION) {
+      const def = CARD_DEF[comp.cardId];
+      if (!def) continue;
       for (let i = 0; i < comp.count; i++) {
         const suit = SUITS[Math.floor(Math.random() * 4)];
         const num = Math.floor(Math.random() * 13) + 1;
         this.deck.push({
           id: cardId++,
           cardDefId: comp.cardId,
-          ...CARD_DEFS.find(c => c.id === comp.cardId),
+          ...def,
           suit: suit,
           number: num,
         });
@@ -2781,8 +2797,11 @@ class Game {
   }
 
   addLog(msg, type = '') {
-    this.logEntries.push({ msg, type, time: Date.now() });
-    if (this.logEntries.length > 200) this.logEntries.shift();
+    this.logEntries.push({ msg, type });
+    // 超过 150 条时批量截断，避免频繁 shift()
+    if (this.logEntries.length > 200) {
+      this.logEntries = this.logEntries.slice(-150);
+    }
   }
 
   // ==================== 渲染 ====================
@@ -2798,6 +2817,18 @@ class Game {
   }
 
   render() {
+    // 使用 rAF 合并同一帧内多次调用，避免 layout thrashing
+    if (this._renderPending) return;
+    this._renderPending = true;
+    if (this._renderRafId) cancelAnimationFrame(this._renderRafId);
+    this._renderRafId = requestAnimationFrame(() => {
+      this._renderRafId = null;
+      this._renderPending = false;
+      this._doRender();
+    });
+  }
+
+  _doRender() {
     const app = document.getElementById('app');
     const player = this.players[this.currentPlayerIdx];
     const humanPlayer = this.players.find(p => p.isHuman);
@@ -2818,6 +2849,7 @@ class Game {
         ${this._isPvP ? ' <span style="color:#60c0ff;">[PvP]</span>' : ''}
       </div>
       <div class="deck-info">
+        <span id="ai-speed-indicator" class="ai-speed">正常</span>
         <span class="deck-count">牌堆: ${this.deck.length} | 弃牌: ${this.discardPile.length}</span>
         <div class="deck-visual">牌<br>堆</div>
       </div>
@@ -3347,6 +3379,8 @@ function startGame(heroId) {
   document.getElementById('app').innerHTML = '';
   game = new Game();
   window.game = game;
+  // 重置 AI 速度为默认
+  if (typeof setAISpeed === 'function') setAISpeed(0.45);
   game.init(heroId);
   game.render();
 }

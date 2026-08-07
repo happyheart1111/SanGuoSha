@@ -1,6 +1,18 @@
 // ==================== AI 逻辑模块 ====================
 // 所有 AI 决策方法通过 Game.prototype 扩展
 
+// AI 速度倍率：0~1，越小越快。1=原速，0.45=默认提速（适合网页版）
+let AI_SPEED = 0.45;
+// 最小延迟，防止瞬间闪过
+const AI_MIN_DELAY = 60;
+
+// 获取实际延迟
+function _aid(ms) { return Math.max(AI_MIN_DELAY, Math.round(ms * AI_SPEED)); }
+
+// 公开 API：设置 AI 速度
+function setAISpeed(speed) { AI_SPEED = Math.max(0.05, Math.min(1, speed)); }
+function getAISpeed() { return AI_SPEED; }
+
 // AI 摸牌阶段
 Game.prototype.aiDrawPhase = function(player, skipPlay) {
   // 张辽突袭 AI
@@ -27,9 +39,9 @@ Game.prototype.aiDrawPhase = function(player, skipPlay) {
   this.phase = 'play';
   this.render();
   if (!skipPlay) {
-    setTimeout(() => this.aiPlayPhase(player), 800);
+    setTimeout(() => this.aiPlayPhase(player), _aid(800));
   } else {
-    setTimeout(() => this.goToDiscardPhase(player), 600);
+    setTimeout(() => this.goToDiscardPhase(player), _aid(600));
   }
 };
 
@@ -42,7 +54,7 @@ Game.prototype.aiPlayPhase = function(player) {
   this.aiUseSkills(player);
 
   // 如果技能触发了效果需要等待，延迟出牌
-  setTimeout(() => this.aiPlayCards(player), 300);
+  setTimeout(() => this.aiPlayCards(player), _aid(300));
 };
 
 // AI 使用武将技能
@@ -150,7 +162,7 @@ Game.prototype.aiPlayCards = function(player) {
       player.hand.splice(equipIdx, 1);
       this.equipCard(player, card);
       this.render();
-      setTimeout(() => this.aiPlayCards(player), 300);
+      setTimeout(() => this.aiPlayCards(player), _aid(300));
       return;
     }
   }
@@ -174,7 +186,7 @@ Game.prototype.aiPlayCards = function(player) {
     if (card.type === 'nanman') this.resolveNanman(player);
     else this.resolveWanjian(player);
     this.render();
-    setTimeout(() => this.aiPlayCards(player), 1000);
+    setTimeout(() => this.aiPlayCards(player), _aid(1000));
     return;
   }
 
@@ -208,7 +220,7 @@ Game.prototype.aiPlayCards = function(player) {
       this.discardCard(player, card);
       this.resolveTao(player);
       this.render();
-      setTimeout(() => this.aiPlayCards(player), 300);
+      setTimeout(() => this.aiPlayCards(player), _aid(300));
       return;
     }
     // 华佗急救：红色牌当桃
@@ -220,7 +232,7 @@ Game.prototype.aiPlayCards = function(player) {
         player.hp++;
         this.addLog(`${player.hero.name}发动【急救】将${card.suit}【${card.name}】当【桃】使用`, 'skill');
         this.render();
-        setTimeout(() => this.aiPlayCards(player), 300);
+        setTimeout(() => this.aiPlayCards(player), _aid(300));
         return;
       }
     }
@@ -236,7 +248,7 @@ Game.prototype.aiPlayCards = function(player) {
       this.discardCard(player, card);
       this.resolveLebu(target);
       this.render();
-      setTimeout(() => this.aiPlayCards(player), 500);
+      setTimeout(() => this.aiPlayCards(player), _aid(500));
       return;
     }
   }
@@ -250,7 +262,7 @@ Game.prototype.aiPlayCards = function(player) {
       this.discardCard(player, card);
       this.resolveBingliang(target);
       this.render();
-      setTimeout(() => this.aiPlayCards(player), 500);
+      setTimeout(() => this.aiPlayCards(player), _aid(500));
       return;
     }
   }
@@ -277,7 +289,7 @@ Game.prototype.aiPlayCards = function(player) {
       if (card.type === 'guohe') this.resolveGuohe(target);
       else this.resolveShunshou(player, target);
       this.render();
-      setTimeout(() => this.aiPlayCards(player), 500);
+      setTimeout(() => this.aiPlayCards(player), _aid(500));
       return;
     }
   }
@@ -292,7 +304,7 @@ Game.prototype.aiPlayCards = function(player) {
       this.discardCard(player, card);
       this.resolveJuedou(player, target);
       this.render();
-      setTimeout(() => this.aiPlayCards(player), 500);
+      setTimeout(() => this.aiPlayCards(player), _aid(500));
       return;
     }
   }
@@ -324,7 +336,7 @@ Game.prototype.aiPlayCards = function(player) {
         this.discardCard(player, card);
         this.resolveHuogong(player, target);
         this.render();
-        setTimeout(() => this.aiPlayCards(player), 800);
+        setTimeout(() => this.aiPlayCards(player), _aid(800));
         return;
       }
     }
@@ -365,7 +377,7 @@ Game.prototype.aiPlayCards = function(player) {
         if (isWusheng) this.addLog(`${player.hero.name}发动【武圣】将${card.suit}【${card.name}】当【杀】使用`, 'skill');
         this.resolveSha(player, target, card);
         this.render();
-        setTimeout(() => this.aiPlayCards(player), 800);
+        setTimeout(() => this.aiPlayCards(player), _aid(800));
         return;
       }
     }
@@ -406,7 +418,7 @@ Game.prototype.aiRespondToSha = function(target, source, card) {
     } else {
       this.addLog(`${target.hero.name}打出一张【闪】，还需${pd.shanNeeded}张`);
       this.render();
-      setTimeout(() => this.aiRespondToSha(target, source, card), 400);
+      setTimeout(() => this.aiRespondToSha(target, source, card), _aid(400));
       return;
     }
   } else if (target.equipment.armor && target.equipment.armor.id === 'baguazhen') {
@@ -424,7 +436,7 @@ Game.prototype.aiRespondToSha = function(target, source, card) {
         } else {
           this.addLog(`判定红色，视为打出【闪】，还需${pd.shanNeeded}张`);
           this.render();
-          setTimeout(() => this.aiRespondToSha(target, source, card), 400);
+          setTimeout(() => this.aiRespondToSha(target, source, card), _aid(400));
           return;
         }
       } else {
@@ -514,3 +526,21 @@ Game.prototype.doFangzhuAI = function(source, target) {
     this.addLog(`${target.hero.name}发动【放逐】摸了1张牌`, 'skill');
   }
 };
+
+// ========== AI 速度快捷键 ==========
+// 按下 F 键切换 AI 速度：快 → 正常 → 快 ...
+let _aiSpeedToggle = false;
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'f' || e.key === 'F') {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    e.preventDefault();
+    _aiSpeedToggle = !_aiSpeedToggle;
+    setAISpeed(_aiSpeedToggle ? 0.08 : 0.45);
+    // 更新速度指示器
+    const indicator = document.getElementById('ai-speed-indicator');
+    if (indicator) {
+      indicator.textContent = _aiSpeedToggle ? '⚡快速' : '正常';
+      indicator.className = _aiSpeedToggle ? 'ai-speed fast' : 'ai-speed';
+    }
+  }
+});
