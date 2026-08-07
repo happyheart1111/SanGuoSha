@@ -19,7 +19,12 @@ class Game {
     this.pendingDamageCards = {};
     this.autoPlay = false; // 托管状态
     this.autoPlayTimer = null;
-    this.gameMode = 1;       // 1=1v1, 5=五人, 8=八人
+    this.gameMode = 1;       // 1=1v1, 5=五人, 8=八人, 'ddz'=三人斗地主
+    this.isDouDizhu = false; // 斗地主模式开关
+    this.ddzBid = null;      // 叫分状态
+    this.ddzHeroIds = null;  // 本局选将（用于重开）
+    this.feiyangUsedThisTurn = false; // 飞扬每回合限一次
+    this.shaUsedCount = 0;   // 出杀计数（地主跋扈可出2张）
     this.rolesRevealed = {}; // 已公开身份
     this.winningTeam = null;
     this.skillModalHero = null;
@@ -225,6 +230,7 @@ class Game {
       alive: true,
       linked: false,
       role: (preRoles && preRoles[i]) ? preRoles[i] : null,
+      shaQuota: 1,        // 出杀上限：普通1，斗地主地主2（跋扈）
     }));
 
     // 5人或8人模式：分配身份（已在选角阶段预分配则跳过）
@@ -307,6 +313,7 @@ class Game {
       isHuman: id === humanHeroId,
       alive: true,
       role: null,
+      shaQuota: 1,        // 出杀上限：普通1，斗地主地主2（跋扈）
     }));
     this.assignSeats();
     this.initDeck();
@@ -758,6 +765,7 @@ class Game {
     const player = this.players[this.currentPlayerIdx];
     if (!player.alive) { this.nextPlayer(); return; }
     this.shaUsedThisTurn = false;
+    this.shaUsedCount = 0;
     this.jiuDamageBoost = false;
     this.tieSuoSelecting = null;
     this.zhihengUsedThisTurn = false;
@@ -767,8 +775,15 @@ class Game {
     this.gongxinUsedThisTurn = false;
     this.haoshiUsedThisTurn = false;
     this.kejiEligible = true;
+    this.feiyangUsedThisTurn = false; // 飞扬每回合限一次
     this.extraShaChances = player.equipment.weapon && player.equipment.weapon.id === 'liannu' ? 999 : 0;
-    
+
+    // 斗地主·地主【跋扈】：准备阶段摸一张牌（锁定技）
+    if (this.isDouDizhu && player.role === 'dizhu') {
+      this.drawCard(player, 1);
+      this.addLog(`${player.hero.name}发动【跋扈】，摸了一张牌`, 'skill');
+    }
+
     // PvP 模式：判断是否需要等待远程玩家
     if (this._isPvP) {
       const isHost = pvpManager && pvpManager.isHost;
@@ -797,6 +812,11 @@ class Game {
     // 处理判定区的延时锦囊
     if (player.judgeArea.length === 0) {
       return this.goToDrawPhase(player);
+    }
+    // 斗地主·地主【飞扬】：判定阶段开始，可弃2手牌抵消1张判定
+    if (this.isDouDizhu && player.role === 'dizhu' && !this.feiyangUsedThisTurn && player.judgeArea.length > 0 && player.hand.length >= 2) {
+      this.maybeFeiyang(player);
+      return;
     }
     const judgeCards = [...player.judgeArea];
     player.judgeArea = [];
@@ -942,8 +962,8 @@ class Game {
       this.render();
     } else if (effectiveType === 'sha') {
       // 非张飞且非武圣转换的杀，检查次数
-      if (player.hero.id !== 'zhangfei' && this.shaUsedThisTurn && card.type === 'sha') {
-        this.addLog('本回合已经使用过【杀】了');
+      if (player.hero.id !== 'zhangfei' && this.shaUsedCount >= player.shaQuota && card.type === 'sha') {
+        this.addLog(`本回合【杀】已用完（上限 ${player.shaQuota} 张）`);
         return;
       }
       const targets = this.getValidTargets({ ...card, type: 'sha' });
@@ -984,6 +1004,12 @@ class Game {
         this.selectedCardIdx = -1;
       });
     } else if (['wuzhong', 'nanman', 'wanjian', 'taoyuan', 'wugu', 'shandian'].includes(card.type)) {
+      // 斗地主：团队治疗锦囊会惠及敌人，农民AOE会误伤队友，禁止释放
+      if (this.isDouDizhu && (card.type === 'taoyuan' || card.type === 'wugu'
+          || ((card.type === 'nanman' || card.type === 'wanjian') && player.role === 'nongmin'))) {
+        this.addLog('斗地主中该锦囊会惠及敌人/误伤队友，无法使用');
+        return;
+      }
       this.useCardOnTarget(card, null, card.type);
       this.selectedCardIdx = -1;
     }
@@ -992,17 +1018,19 @@ class Game {
   getValidTargets(card) {
     const player = this.players[this.currentPlayerIdx];
     const aliveOthers = this.players.filter(p => p.alive && p.id !== player.id);
+    // 斗地主：只能选择敌方角色
+    const teamOk = (t) => !this.isDouDizhu || this.getEnemies(player).some(e => e.id === t.id);
     switch (card.type) {
       case 'sha': {
         const shaRange = this.getShaRange(player);
-        return aliveOthers.filter(t => this.calcDistance(player, t, true) <= shaRange);
+        return aliveOthers.filter(t => this.calcDistance(player, t, true) <= shaRange && teamOk(t));
       }
-      case 'juedou': return aliveOthers.filter(t => t.hero.id !== 'jiaxu');
-      case 'huogong': return aliveOthers.filter(t => t.hand.length > 0);
-      case 'shunshou': return aliveOthers.filter(t => t.hero.id !== 'jiaxu' && this.buildGuoheChoices(t).length > 0 && this.calcDistance(player, t) <= 1);
-      case 'guohe': return aliveOthers.filter(t => t.hero.id !== 'jiaxu' && this.buildGuoheChoices(t).length > 0);
-      case 'lebu': return aliveOthers.filter(t => t.judgeArea.length < 3);
-      case 'bingliang': return aliveOthers.filter(t => t.judgeArea.length < 3 && this.calcDistance(player, t) <= 1);
+      case 'juedou': return aliveOthers.filter(t => t.hero.id !== 'jiaxu' && teamOk(t));
+      case 'huogong': return aliveOthers.filter(t => t.hand.length > 0 && teamOk(t));
+      case 'shunshou': return aliveOthers.filter(t => t.hero.id !== 'jiaxu' && this.buildGuoheChoices(t).length > 0 && this.calcDistance(player, t) <= 1 && teamOk(t));
+      case 'guohe': return aliveOthers.filter(t => t.hero.id !== 'jiaxu' && this.buildGuoheChoices(t).length > 0 && teamOk(t));
+      case 'lebu': return aliveOthers.filter(t => t.judgeArea.length < 3 && teamOk(t));
+      case 'bingliang': return aliveOthers.filter(t => t.judgeArea.length < 3 && this.calcDistance(player, t) <= 1 && teamOk(t));
       default: return [];
     }
   }
@@ -1086,7 +1114,7 @@ class Game {
     this.addLog(`${player.hero.name}${desc}${target ? '，目标是' + target.hero.name : ''}`, isWushengSha ? 'skill' : '');
 
     if (effectiveType === 'sha') {
-      if (player.hero.id !== 'zhangfei' && this.extraShaChances <= 0) this.shaUsedThisTurn = true;
+      if (player.hero.id !== 'zhangfei' && this.extraShaChances <= 0) this.shaUsedCount++;
       if (this.extraShaChances > 0) this.extraShaChances--;
       this.resolveSha(player, target, card);
     } else {
@@ -1171,11 +1199,14 @@ class Game {
         this.waitingForTarget = null;
         delete this.pendingDamageCards[target.id];
         this.addLog(`${target.hero.name}${isWusheng ? '发动【武圣】' : ''}打出【闪】，成功闪避`, isWusheng ? 'skill' : '');
-      } else {
+      } else if (pd) {
         this.addLog(`${target.hero.name}打出一张【闪】，还需${pd.shanNeeded}张`);
         this.waitingForTarget = null;
         setTimeout(() => this.waitForShanResponse(target, source, card), 200);
         return;
+      } else {
+        this.addLog(`${target.hero.name}打出【闪】，但伤害已消解，无需继续响应`);
+        this.waitingForTarget = null;
       }
     } else {
       this.waitingForTarget = null;
@@ -1210,10 +1241,12 @@ class Game {
       if (pd && pd.shanNeeded <= 0) {
         delete this.pendingDamageCards[target.id];
         this.addLog('判定为红色，视为打出了一张【闪】，成功闪避', 'skill');
-      } else {
+      } else if (pd) {
         this.addLog(`判定为红色，视为打出一张【闪】，还需${pd.shanNeeded}张`);
         setTimeout(() => this.waitForShanResponse(target, source, card), 200);
         return;
+      } else {
+        this.addLog('判定为红色，但伤害已消解，无需继续响应');
       }
     } else {
       this.addLog('判定为黑色，【八卦阵】未触发，仍需要【闪】', 'skill');
@@ -1636,7 +1669,7 @@ class Game {
   }
 
   processAOETargets(source, targets, requiredType, idx) {
-    if (idx >= targets.length) return;
+    if (idx >= targets.length) { this._resumeSourcePlay(source); return; }
     const target = targets[idx];
 
     if (target.isHuman && !this.autoPlay) {
@@ -1991,6 +2024,11 @@ class Game {
       this.drawCard(source, 3);
       this.addLog(`${source.hero.name}杀死反贼，摸3张牌奖励！`, 'reward');
     }
+    // 斗地主：农民队友阵亡，存活农民触发【同心】补偿
+    if (this.isDouDizhu && player.role === 'nongmin') {
+      const mate = this.players.find(p => p.alive && p.role === 'nongmin' && p.id !== player.id);
+      if (mate) this.triggerNongminBonus(mate, player);
+    }
     // 主公杀死忠臣惩罚：弃掉所有手牌和装备
     if (player.role === 'zhongchen' && source && source.role === 'zhugong' && source.alive) {
       this.addLog(`主公误杀忠臣！${source.hero.name}弃掉所有手牌和装备`, 'penalty');
@@ -2041,7 +2079,8 @@ class Game {
     switch (skillId) {
       case 'rende': {
         if (player.hand.length === 0) { this.addLog('没有手牌可以给出'); return; }
-        const targets = this.players.filter(p => p.alive && p.id !== player.id);
+        const targets = this.players.filter(p => p.alive && p.id !== player.id).filter(this.ddzTargetFilter(player, 'ally'));
+        if (targets.length === 0) { this.addLog('没有可给牌的队友'); return; }
         this.showTargetSelection({ name: '仁德', type: 'skill' }, targets, (target) => this.doRende(player, target));
         break;
       }
@@ -2068,11 +2107,12 @@ class Game {
       case 'jieyin': {
         if (this.jieyinUsedThisTurn) { this.addLog('本回合已经使用过【结姻】了'); return; }
         if (player.hand.length < 2) { this.addLog('手牌不足2张，无法发动【结姻】'); return; }
-        const targets = this.players.filter(p => p.alive && p.id !== player.id);
+        const targets = this.players.filter(p => p.alive && p.id !== player.id).filter(this.ddzTargetFilter(player, 'ally'));
+        if (targets.length === 0) { this.addLog('没有可结姻的队友'); return; }
         this.waitingForTarget = {
           type: 'jieyin_discard',
           player,
-          targets: this.players.filter(p => p.alive && p.id !== player.id),
+          targets: targets,
           selected: [],
         };
         this.render();
@@ -2081,8 +2121,8 @@ class Game {
       case 'qingnang': {
         if (this.qingnangUsedThisTurn) { this.addLog('本回合已经使用过【青囊】了'); return; }
         if (player.hand.length === 0) { this.addLog('没有手牌可弃置'); return; }
-        const targets = this.players.filter(p => p.alive && p.hp < p.hero.maxHp);
-        if (targets.length === 0) { this.addLog('没有需要治疗的受伤角色'); return; }
+        const targets = this.players.filter(p => p.alive && p.hp < p.hero.maxHp).filter(this.ddzTargetFilter(player, 'ally'));
+        if (targets.length === 0) { this.addLog('没有需要治疗的受伤队友'); return; }
         this.waitingForTarget = { type: 'qingnang_select', player, targets };
         this.render();
         break;
@@ -2090,15 +2130,16 @@ class Game {
       case 'yeyan': {
         if (this.yeyanUsedThisTurn) { this.addLog('本回合已经使用过【业炎】了'); return; }
         if (player.hand.length < 3) { this.addLog('手牌不足3张，无法发动【业炎】'); return; }
-        const yetargets = this.players.filter(p => p.alive && p.id !== player.id);
+        const yetargets = this.players.filter(p => p.alive && p.id !== player.id).filter(this.ddzTargetFilter(player, 'enemy'));
+        if (yetargets.length === 0) { this.addLog('没有可发动【业炎】的敌方目标'); return; }
         this.waitingForTarget = { type: 'yeyan_discard', player, targets: yetargets, selected: [] };
         this.render();
         break;
       }
       case 'gongxin': {
         if (this.gongxinUsedThisTurn) { this.addLog('本回合已经使用过【攻心】了'); return; }
-        const gotargets = this.players.filter(p => p.alive && p.id !== player.id && p.hand.length > 0);
-        if (gotargets.length === 0) { this.addLog('没有有手牌的目标'); return; }
+        const gotargets = this.players.filter(p => p.alive && p.id !== player.id && p.hand.length > 0).filter(this.ddzTargetFilter(player, 'enemy'));
+        if (gotargets.length === 0) { this.addLog('没有有手牌的敌方目标'); return; }
         if (gotargets.length === 1) { this.doGongxin(player, gotargets[0]); }
         else { this.showTargetSelection({ name: '攻心', type: 'skill' }, gotargets, (t) => this.doGongxin(player, t)); }
         break;
@@ -2106,8 +2147,8 @@ class Game {
       case 'haoshi': {
         if (this.haoshiUsedThisTurn) { this.addLog('本回合已经使用过【好施】了'); return; }
         if (player.hand.length === 0) { this.addLog('没有手牌可弃置'); return; }
-        const hatargets = this.players.filter(p => p.alive && p.hp < p.hero.maxHp);
-        if (hatargets.length === 0) { this.addLog('没有需要治疗的受伤角色'); return; }
+        const hatargets = this.players.filter(p => p.alive && p.hp < p.hero.maxHp).filter(this.ddzTargetFilter(player, 'ally'));
+        if (hatargets.length === 0) { this.addLog('没有需要治疗的受伤队友'); return; }
         this.waitingForTarget = { type: 'haoshi_select', player, targets: hatargets };
         this.render();
         break;
@@ -2223,6 +2264,7 @@ class Game {
     // 每种花色取1张
     const suits = {};
     for (const c of revealed) {
+      if (!c || !c.suit) continue; // 防御：跳过异常牌，避免抽牌堆耗尽/重洗竞态导致的崩溃
       const s = c.suit[0];
       if (!suits[s]) suits[s] = c;
     }
@@ -2304,7 +2346,8 @@ class Game {
   }
 
   triggerDimengGive(player) {
-    const others = this.players.filter(p => p.alive && p.id !== player.id);
+    let others = this.players.filter(p => p.alive && p.id !== player.id);
+    if (this.isDouDizhu) others = others.filter(p => this.getAllies(player).some(a => a.id === p.id));
     if (others.length === 0) return;
     let target = others[0];
     for (const o of others) {
@@ -2442,6 +2485,7 @@ class Game {
     this.phase = 'idle';
     this.selectedCardIdx = -1;
     this.shaUsedThisTurn = false;
+    this.shaUsedCount = 0;
     this.zhihengUsedThisTurn = false;
     
     // PvP 状态同步
@@ -2468,6 +2512,16 @@ class Game {
         result = { team: 'zhugong', winners: alive.filter(p => p.role === 'zhugong' || p.role === 'zhongchen'), msg: '反贼与内奸已全部消灭，主公忠臣获胜！' };
       } else if (alive.length === 1 && alive[0].role === 'neijian') {
         result = { team: 'neijian', winners: [alive[0]], msg: '内奸成为最后的幸存者，内奸获胜！' };
+      }
+    } else if (this.isDouDizhu) {
+      // 斗地主胜负：地主阵亡→农民胜；农民全灭→地主胜
+      const landlord = this.players.find(p => p.role === 'dizhu');
+      const peasants = this.players.filter(p => p.role === 'nongmin');
+      const alivePeasants = peasants.filter(p => p.alive);
+      if (landlord && !landlord.alive) {
+        result = { team: 'nongmin', winners: alivePeasants, msg: '地主阵亡，农民获胜！' };
+      } else if (alivePeasants.length === 0) {
+        result = { team: 'dizhu', winners: [landlord], msg: '农民全部阵亡，地主获胜！' };
       }
     } else {
       if (alive.length <= 1) {
@@ -2537,6 +2591,8 @@ class Game {
 
   _doRender() {
     const app = document.getElementById('app');
+    // 叫分阶段：单独渲染叫分界面
+    if (this.phase === 'bidding') { app.innerHTML = this.renderBidding(); return; }
     const player = this.players[this.currentPlayerIdx];
     const humanPlayer = this.players.find(p => p.isHuman);
     const isHumanTurn = player && player.isHuman;
@@ -2549,9 +2605,9 @@ class Game {
     <div class="top-bar">
       <h1>🏯 三国杀</h1>
       <div class="game-info">
-        ${this.gameMode >= 5 ? getGameModeName(this.gameMode) + ' · ' : ''}
+        ${(this.gameMode >= 5 || this.isDouDizhu) ? this.getModeName() + ' · ' : ''}
         回合: ${player ? player.hero.name : ''}
-        ${this.gameMode >= 5 && humanPlayer && humanPlayer.role ? ` · 你的身份: ${getRoleDisplayName(humanPlayer.role)}` : ''}
+        ${(this.gameMode >= 5 || this.isDouDizhu) && humanPlayer && humanPlayer.role ? ` · 你的身份: ${getRoleDisplayName(humanPlayer.role)}` : ''}
         ${isAutoTurn ? ' <span style="color:#60ff80;">[托管中]</span>' : ''}
         ${this._isPvP ? ' <span style="color:#60c0ff;">[PvP]</span>' : ''}
       </div>
@@ -2802,6 +2858,19 @@ class Game {
         html += '<button class="btn skill-btn" onclick="game.humanLeiji(true)">发动</button>';
         html += '<button class="btn" onclick="game.humanLeiji(false)">不发动</button>';
       }
+      if (wt.type === 'feiyang') {
+        html += `<span style="color:#f0d060;margin-right:10px;">【飞扬】选择要抵消的判定牌（将弃2张手牌）：</span>`;
+        for (let i = 0; i < wt.judgeCards.length; i++) {
+          const jc = wt.judgeCards[i];
+          html += `<button class="btn skill-btn" onclick="game.humanFeiyang(${i})">抵消【${jc.name}】</button>`;
+        }
+        html += '<button class="btn" onclick="game.humanFeiyang(-1)">不发动</button>';
+      }
+      if (wt.type === 'nongmin_bonus') {
+        html += `<span style="color:#60e080;margin-right:10px;">队友阵亡！【同心】选择：</span>`;
+        html += '<button class="btn skill-btn" onclick="game.humanNongminBonus(\'draw\')">摸2张牌</button>';
+        html += '<button class="btn skill-btn" onclick="game.humanNongminBonus(\'heal\')">回复1点体力</button>';
+      }
       if (wt.type === 'discard_phase') {
         html += `<span style="color:#ff6060;margin-right:10px;">已选 ${wt.selected.length}/${wt.needDiscard} 张</span>`;
         html += `<button class="btn danger" onclick="game.humanConfirmDiscard()" ${wt.selected.length !== wt.needDiscard ? 'disabled' : ''}>确认弃置</button>`;
@@ -2874,6 +2943,11 @@ class Game {
         isWin = humanWin;
         const teamNames = { zhugong: '主公&忠臣', fanzei: '反贼', neijian: '内奸', free: '自由' };
         resultMsg = `获胜阵营：${teamNames[this.winningTeam] || '未知'}`;
+      } else if (this.isDouDizhu) {
+        const humanWin = (this.winningTeam === 'dizhu' && hu.role === 'dizhu')
+                       || (this.winningTeam === 'nongmin' && hu.role === 'nongmin');
+        isWin = humanWin;
+        resultMsg = `获胜阵营：${this.winningTeam === 'dizhu' ? '🏴 地主' : '🌾 农民'}`;
       } else {
         const alive = this.players.filter(p => p.alive);
         isWin = alive.length > 0 && (this._isPvP ? hu.alive : alive[0].isHuman);
@@ -2885,7 +2959,7 @@ class Game {
           <h2>${isWin ? '🎉 胜利！' : '💀 失败…'}</h2>
           <p>${resultMsg}</p>`;
       // 显示所有玩家身份
-      if (this.gameMode >= 5) {
+      if (this.gameMode >= 5 || this.isDouDizhu) {
         html += '<div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin:10px 0;">';
         for (const p of this.players) {
           const r = ROLES[p.role];
@@ -2938,8 +3012,8 @@ class Game {
     html += `<div class="hero-avatar ${player.hero.avatarClass}">${player.hero.name[0]}</div>`;
     html += `<div><div class="hero-name">${player.hero.name}${player.linked ? ' ⛓️' : ''}</div><div class="hero-title">${player.hero.title}</div><div class="hero-faction">${player.hero.faction}</div>`;
     // 显示身份：人类玩家始终可见，主公始终公开，其他人死亡后公开
-    if (this.gameMode >= 5 && player.role) {
-      const showRole = player.isHuman || this.rolesRevealed[player.id] || this.gameOver || player.role === 'zhugong';
+    if ((this.gameMode >= 5 || this.isDouDizhu) && player.role) {
+      const showRole = player.isHuman || this.rolesRevealed[player.id] || this.gameOver || player.role === 'zhugong' || player.role === 'dizhu';
       const roleInfo = ROLES[player.role];
       html += `<div style="font-size:10px;color:${roleInfo.color};margin-top:2px;">`;
       html += showRole ? `${roleInfo.icon} ${roleInfo.name}` : `❓ 未知`;
@@ -3084,6 +3158,10 @@ class Game {
   }
 
   restart() {
+    if (this.isDouDizhu && this.ddzHeroIds) {
+      startDouDizhuBidding(this.ddzHeroIds);
+      return;
+    }
     if (this.gameMode >= 5 && this.heroIdList) {
       this.init(this.gameMode, this.heroIdList);
     } else {
@@ -3126,15 +3204,15 @@ function showGameModeSelect() {
       <h1 style="font-size:40px;color:#f0d060;text-shadow:0 0 20px rgba(240,208,96,0.5);letter-spacing:8px;">🏯 三国杀</h1>
       <p style="color:#c0a060;font-size:16px;">选择游戏模式</p>
       <div style="display:flex;gap:20px;flex-wrap:wrap;justify-content:center;">
-        <div onclick="startHeroPick(1)" style="
+        <div onclick="startHeroPick('ddz')" style="
           width:200px;padding:30px;background:linear-gradient(180deg,rgba(30,15,5,0.9),rgba(50,25,10,0.95));
           border:2px solid #8b6914;border-radius:16px;cursor:pointer;text-align:center;
           transition:all 0.3s;
         " onmouseover="this.style.transform='scale(1.05)';this.style.borderColor='#f0d060';this.style.boxShadow='0 0 25px rgba(240,208,96,0.3)'"
            onmouseout="this.style.transform='scale(1)';this.style.borderColor='#8b6914';this.style.boxShadow='none'">
-          <div style="font-size:48px;">⚔️</div>
-          <div style="font-size:20px;font-weight:bold;margin:12px 0;color:#f0d060;">1v1 混战</div>
-          <div style="font-size:12px;color:#a08050;">你 + 2名AI · 自由对战</div>
+          <div style="font-size:48px;">🃏</div>
+          <div style="font-size:20px;font-weight:bold;margin:12px 0;color:#f0d060;">三人斗地主</div>
+          <div style="font-size:12px;color:#a08050;">1地主 vs 2农民 · 叫分定身份</div>
         </div>
         <div onclick="startHeroPick(5)" style="
           width:200px;padding:30px;background:linear-gradient(180deg,rgba(30,15,5,0.9),rgba(50,25,10,0.95));
@@ -3931,11 +4009,14 @@ function shuffleArray(arr) {
 let heroPickState = null;
 
 function startHeroPick(gameMode) {
-  const totalPlayers = gameMode === 1 ? 3 : gameMode;
+  const totalPlayers = (gameMode === 1 || gameMode === 'ddz') ? 3 : gameMode;
   const allHeroIds = Object.keys(HEROES);
 
+  // 斗地主禁将：剔除与节奏冲突的武将
+  const availableHeroes = allHeroIds.filter(h => !(gameMode === 'ddz' && DDZ_BANNED.includes(h)));
+
   // 为每个玩家随机分配3个候选英雄（不重复）
-  const pool = [...allHeroIds];
+  const pool = [...availableHeroes];
   for (let k = pool.length - 1; k > 0; k--) {
     const j = Math.floor(Math.random() * (k + 1));
     [pool[k], pool[j]] = [pool[j], pool[k]];
@@ -4050,7 +4131,7 @@ function showHumanHeroPick(heroChoices, gameMode, lordHero, lordIdx) {
   app.innerHTML = `
     <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;gap:25px;padding:20px;">
       <h1 style="font-size:30px;color:#f0d060;text-shadow:0 0 20px rgba(240,208,96,0.5);">🎯 选择武将</h1>
-      <p style="color:#c0a060;font-size:15px;">${modeNames[gameMode] || gameMode + '人局'} — 从${pickCount}名武将中选择一位</p>
+      <p style="color:#c0a060;font-size:15px;">${getGameModeName(gameMode) || gameMode + '人局'} — 从${pickCount}名武将中选择一位</p>
       ${lordInfoHtml}
       <div style="display:flex;gap:25px;flex-wrap:wrap;justify-content:center;">
         ${cardsHtml}
@@ -4079,7 +4160,13 @@ function confirmHeroPick(heroId) {
   }
 
   const preRoles = heroPickState.roles;
+  const isDdz = heroPickState.gameMode === 'ddz';
   heroPickState = null;
+  if (isDdz) {
+    document.getElementById('app').innerHTML = '';
+    startDouDizhuBidding(pickedHeroIds);
+    return;
+  }
   const mode = pickedHeroIds.length >= 5 ? pickedHeroIds.length : 1;
   document.getElementById('app').innerHTML = '';
   game = new Game();

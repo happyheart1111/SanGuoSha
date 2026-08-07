@@ -77,7 +77,7 @@ Game.prototype.aiUseSkills = function(player) {
 
   // 刘备仁德
   if (player.hero.id === 'liubei' && player.hand.length >= 3 && player.hp < player.hero.maxHp) {
-    const allies = this.players.filter(p => p.alive && p.id !== player.id);
+    const allies = this.players.filter(p => p.alive && p.id !== player.id && (!this.isDouDizhu || this.getAllies(player).some(a => a.id === p.id)));
     if (allies.length > 0) {
       const ally = allies.reduce((a, b) => a.hp <= b.hp ? a : b);
       const count = player.hand.length;
@@ -106,7 +106,7 @@ Game.prototype.aiUseSkills = function(player) {
   // 孙尚香结姻
   if (player.hero.id === 'sunshangxiang' && !this.jieyinUsedThisTurn && player.hand.length >= 2
       && (player.hp < player.hero.maxHp)) {
-    const ally = this.players.find(p => p.alive && p.id !== player.id && p.hp < p.hero.maxHp);
+    const ally = this.players.find(p => p.alive && p.id !== player.id && p.hp < p.hero.maxHp && (!this.isDouDizhu || this.getAllies(player).some(a => a.id === p.id)));
     if (ally) {
       const cards = player.hand.slice(0, 2);
       for (const c of cards) this.discardCard(player, c);
@@ -118,7 +118,7 @@ Game.prototype.aiUseSkills = function(player) {
   }
   // 华佗青囊
   if (player.hero.id === 'huatuo' && !this.qingnangUsedThisTurn && player.hand.length >= 1) {
-    const injured = this.players.find(p => p.alive && p.hp < p.hero.maxHp);
+    const injured = this.players.find(p => p.alive && p.hp < p.hero.maxHp && (!this.isDouDizhu || p.id === player.id || this.getAllies(player).some(a => a.id === p.id)));
     if (injured) {
       const card = player.hand[0];
       this.discardCard(player, card);
@@ -129,7 +129,7 @@ Game.prototype.aiUseSkills = function(player) {
   }
   // 神·鲁肃好施
   if (player.hero.id === 'shen-lusu' && !this.haoshiUsedThisTurn && player.hand.length >= 1) {
-    const injured = this.players.find(p => p.alive && p.hp < p.hero.maxHp);
+    const injured = this.players.find(p => p.alive && p.hp < p.hero.maxHp && (!this.isDouDizhu || p.id === player.id || this.getAllies(player).some(a => a.id === p.id)));
     if (injured) {
       const card = player.hand[0];
       this.discardCard(player, card);
@@ -140,7 +140,7 @@ Game.prototype.aiUseSkills = function(player) {
   }
   // 神周瑜业炎
   if (player.hero.id === 'shen-zhouyu' && !this.yeyanUsedThisTurn && player.hand.length >= 3) {
-    const enemy = this.players.filter(p => p.alive && p.id !== player.id).sort((a, b) => a.hp - b.hp)[0];
+    const enemy = this.players.filter(p => p.alive && p.id !== player.id && (!this.isDouDizhu || this.getEnemies(player).some(e => e.id === p.id))).sort((a, b) => a.hp - b.hp)[0];
     if (enemy) {
       const cards = player.hand.splice(0, 3);
       for (const c of cards) this.discardPile.push(c);
@@ -196,9 +196,9 @@ Game.prototype.aiPlayCards = function(player) {
     return;
   }
 
-  // AOE
+  // AOE：地主可释放（压制双农民）；农民释放会误伤队友，斗地主中禁止
   const aoeIdx = player.hand.findIndex(c => c.type === 'nanman' || c.type === 'wanjian');
-  if (aoeIdx >= 0) {
+  if (aoeIdx >= 0 && !(this.isDouDizhu && player.role === 'nongmin')) {
     const card = player.hand[aoeIdx];
     this.discardCard(player, card);
     if (card.type === 'nanman') this.resolveNanman(player);
@@ -208,9 +208,9 @@ Game.prototype.aiPlayCards = function(player) {
     return;
   }
 
-  // 桃园结义
+  // 桃园结义：斗地主中团队治疗会惠及敌人，AI 不释放
   const taoyuanIdx = player.hand.findIndex(c => c.type === 'taoyuan');
-  if (taoyuanIdx >= 0) {
+  if (taoyuanIdx >= 0 && !this.isDouDizhu) {
     const card = player.hand[taoyuanIdx];
     this.discardCard(player, card);
     this.resolveTaoyuan(player);
@@ -219,9 +219,9 @@ Game.prototype.aiPlayCards = function(player) {
     return;
   }
 
-  // 五谷丰登
+  // 五谷丰登：同上，斗地主中 AI 不释放
   const wuguIdx = player.hand.findIndex(c => c.type === 'wugu');
-  if (wuguIdx >= 0) {
+  if (wuguIdx >= 0 && !this.isDouDizhu) {
     const card = player.hand[wuguIdx];
     this.discardCard(player, card);
     this.resolveWugu(player);
@@ -260,7 +260,7 @@ Game.prototype.aiPlayCards = function(player) {
   const lebuIdx = player.hand.findIndex(c => c.type === 'lebu');
   if (lebuIdx >= 0) {
     const card = player.hand[lebuIdx];
-    const targets = this.players.filter(p => p.alive && p.id !== player.id && p.judgeArea.length < 3);
+    const targets = this.players.filter(p => p.alive && p.id !== player.id && p.judgeArea.length < 3 && (!this.isDouDizhu || this.getEnemies(player).some(e => e.id === p.id)));
     if (targets.length > 0) {
       const target = targets.reduce((a, b) => a.hp <= b.hp ? a : b);
       this.discardCard(player, card);
@@ -274,7 +274,7 @@ Game.prototype.aiPlayCards = function(player) {
   const bingliangIdx = player.hand.findIndex(c => c.type === 'bingliang');
   if (bingliangIdx >= 0) {
     const card = player.hand[bingliangIdx];
-    const targets = this.players.filter(p => p.alive && p.id !== player.id && p.judgeArea.length < 3 && this.calcDistance(player, p) <= 1);
+    const targets = this.players.filter(p => p.alive && p.id !== player.id && p.judgeArea.length < 3 && this.calcDistance(player, p) <= 1 && (!this.isDouDizhu || this.getEnemies(player).some(e => e.id === p.id)));
     if (targets.length > 0) {
       const target = targets.reduce((a, b) => a.hp <= b.hp ? a : b);
       this.discardCard(player, card);
@@ -300,7 +300,7 @@ Game.prototype.aiPlayCards = function(player) {
   if (toolIdx >= 0) {
     const card = player.hand[toolIdx];
     const hasEquip = (p) => p.equipment.weapon || p.equipment.armor || p.equipment.plusHorse || p.equipment.minusHorse;
-    const targets = this.players.filter(p => p.alive && p.id !== player.id && p.hero.id !== 'jiaxu' && (p.hand.length > 0 || (card.type === 'guohe' && (hasEquip(p) || p.judgeArea.length > 0))));
+    const targets = this.players.filter(p => p.alive && p.id !== player.id && p.hero.id !== 'jiaxu' && (p.hand.length > 0 || (card.type === 'guohe' && (hasEquip(p) || p.judgeArea.length > 0))) && (!this.isDouDizhu || this.getEnemies(player).some(e => e.id === p.id)));
     if (targets.length > 0) {
       const target = targets.reduce((a, b) => a.hp >= b.hp ? a : b);
       this.discardCard(player, card);
@@ -316,7 +316,7 @@ Game.prototype.aiPlayCards = function(player) {
   const juedouIdx = player.hand.findIndex(c => c.type === 'juedou');
   if (juedouIdx >= 0) {
     const card = player.hand[juedouIdx];
-    const targets = this.players.filter(p => p.alive && p.id !== player.id && p.hero.id !== 'jiaxu');
+    const targets = this.players.filter(p => p.alive && p.id !== player.id && p.hero.id !== 'jiaxu' && (!this.isDouDizhu || this.getEnemies(player).some(e => e.id === p.id)));
     if (targets.length > 0) {
       const target = targets.reduce((a, b) => a.hand.length <= b.hand.length ? a : b);
       this.discardCard(player, card);
@@ -345,7 +345,7 @@ Game.prototype.aiPlayCards = function(player) {
   const huogongIdx = player.hand.findIndex(c => c.type === 'huogong');
   if (huogongIdx >= 0) {
     const card = player.hand[huogongIdx];
-    const targets = this.players.filter(p => p.alive && p.id !== player.id && p.hand.length > 0);
+    const targets = this.players.filter(p => p.alive && p.id !== player.id && p.hand.length > 0 && (!this.isDouDizhu || this.getEnemies(player).some(e => e.id === p.id)));
     if (targets.length > 0) {
       const target = targets.reduce((a, b) => a.hp <= b.hp ? a : b);
       // 检查是否有弃牌能力
@@ -373,7 +373,7 @@ Game.prototype.aiPlayCards = function(player) {
 
   // 杀（张飞/诸葛连弩无限次数，加吕蒙不打杀保持克己）
   const liannuBonus = player.equipment.weapon && player.equipment.weapon.id === 'liannu' ? 999 : 0;
-  const canSha = player.hero.id === 'zhangfei' || !this.shaUsedThisTurn || liannuBonus > 0;
+  const canSha = player.hero.id === 'zhangfei' || this.shaUsedCount < player.shaQuota || liannuBonus > 0;
   // 吕蒙AI：如果手牌多且安全，不打杀以保持克己
   const kejiHold = player.hero.id === 'lvmeng' && player.hand.length > player.hp && player.hp > 1;
   if (canSha && !kejiHold) {
@@ -385,7 +385,7 @@ Game.prototype.aiPlayCards = function(player) {
     if (shaIdx >= 0) {
       const card = player.hand[shaIdx];
       const shaRange = this.getShaRange(player);
-      const targets = this.players.filter(p => p.alive && p.id !== player.id && this.calcDistance(player, p, true) <= shaRange);
+      const targets = this.players.filter(p => p.alive && p.id !== player.id && this.calcDistance(player, p, true) <= shaRange && (!this.isDouDizhu || this.getEnemies(player).some(e => e.id === p.id)));
       if (targets.length > 0) {
         const target = targets.reduce((a, b) => a.hp <= b.hp ? a : b);
         this.discardCard(player, card);
@@ -393,6 +393,7 @@ Game.prototype.aiPlayCards = function(player) {
         if (this.extraShaChances > 0) this.extraShaChances--;
         const isWusheng = card.type !== 'sha';
         if (isWusheng) this.addLog(`${player.hero.name}发动【武圣】将${card.suit}【${card.name}】当【杀】使用`, 'skill');
+        if (player.hero.id !== 'zhangfei' && this.extraShaChances <= 0) this.shaUsedCount++;
         this.resolveSha(player, target, card);
         this.render();
         setTimeout(() => this.aiPlayCards(player), _aid(800));
@@ -433,11 +434,15 @@ Game.prototype.aiRespondToSha = function(target, source, card) {
     if (pd && pd.shanNeeded <= 0) {
       delete this.pendingDamageCards[target.id];
       this.addLog(`${target.hero.name}${isWusheng ? '发动【武圣】' : ''}打出【闪】，成功闪避${totalNeeded > 1 ? '（无双）' : ''}`, isWusheng ? 'skill' : '');
-    } else {
+    } else if (pd) {
       this.addLog(`${target.hero.name}打出一张【闪】，还需${pd.shanNeeded}张`);
       this.render();
       setTimeout(() => this.aiRespondToSha(target, source, card), _aid(400));
       return;
+    } else {
+      // pd 已不存在（伤害已被其他路径消解），无需继续响应
+      this.addLog(`${target.hero.name}打出【闪】，但伤害已消解，无需继续响应`);
+      this.render();
     }
   } else if (target.equipment.armor && target.equipment.armor.id === 'baguazhen') {
     const judgeCard = this.drawOne();
@@ -451,11 +456,14 @@ Game.prototype.aiRespondToSha = function(target, source, card) {
         if (pd && pd.shanNeeded <= 0) {
           delete this.pendingDamageCards[target.id];
           this.addLog('判定红色，视为打出【闪】，成功闪避', 'skill');
-        } else {
+        } else if (pd) {
           this.addLog(`判定红色，视为打出【闪】，还需${pd.shanNeeded}张`);
           this.render();
           setTimeout(() => this.aiRespondToSha(target, source, card), _aid(400));
           return;
+        } else {
+          this.addLog('判定为红色，但伤害已消解，无需继续响应');
+          this.render();
         }
       } else {
         this.addLog('判定黑色，【八卦阵】未生效', 'skill');
@@ -511,6 +519,7 @@ Game.prototype.aiRespondJuedou = function(defender, challenger, lübuInvolved) {
     this.addLog(`${defender.hero.name}无法打出${needed > 1 ? '足够的' : ''}【杀】，受到1点伤害`);
     this.dealDamage(defender, challenger, 1);
     this.render();
+    this._resumeSourcePlay(challenger);
   }
 };
 
