@@ -938,7 +938,8 @@ class Game {
         return aliveOthers.filter(t => this.calcDistance(player, t, true) <= shaRange);
       }
       case 'juedou': case 'guohe': case 'shunshou': return aliveOthers;
-      case 'lebu': case 'bingliang': return aliveOthers.filter(t => t.judgeArea.length < 3);
+      case 'lebu': return aliveOthers.filter(t => t.judgeArea.length < 3);
+      case 'bingliang': return aliveOthers.filter(t => t.judgeArea.length < 3 && this.calcDistance(player, t) <= 1);
       default: return [];
     }
   }

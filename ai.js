@@ -226,16 +226,29 @@ Game.prototype.aiPlayCards = function(player) {
     }
   }
 
-  // 乐不思蜀/兵粮寸断 - 对敌人使用
-  const delayIdx = player.hand.findIndex(c => c.type === 'lebu' || c.type === 'bingliang');
-  if (delayIdx >= 0) {
-    const card = player.hand[delayIdx];
+  // 乐不思蜀 - 对任意敌人使用
+  const lebuIdx = player.hand.findIndex(c => c.type === 'lebu');
+  if (lebuIdx >= 0) {
+    const card = player.hand[lebuIdx];
     const targets = this.players.filter(p => p.alive && p.id !== player.id && p.judgeArea.length < 3);
     if (targets.length > 0) {
       const target = targets.reduce((a, b) => a.hp <= b.hp ? a : b);
       this.discardCard(player, card);
-      if (card.type === 'lebu') this.resolveLebu(target);
-      else this.resolveBingliang(target);
+      this.resolveLebu(target);
+      this.render();
+      setTimeout(() => this.aiPlayCards(player), 500);
+      return;
+    }
+  }
+  // 兵粮寸断 - 仅可对距离1内的敌人使用
+  const bingliangIdx = player.hand.findIndex(c => c.type === 'bingliang');
+  if (bingliangIdx >= 0) {
+    const card = player.hand[bingliangIdx];
+    const targets = this.players.filter(p => p.alive && p.id !== player.id && p.judgeArea.length < 3 && this.calcDistance(player, p) <= 1);
+    if (targets.length > 0) {
+      const target = targets.reduce((a, b) => a.hp <= b.hp ? a : b);
+      this.discardCard(player, card);
+      this.resolveBingliang(target);
       this.render();
       setTimeout(() => this.aiPlayCards(player), 500);
       return;
