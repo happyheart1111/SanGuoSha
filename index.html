@@ -500,8 +500,9 @@ class Game {
     this.tuxiUsedThisTurn = false;
   }
 
-  init(gameMode, heroIds) {
+  init(gameMode, heroIds, preRoles) {
     // gameMode: 数字参数；heroIds: [heroId1, heroId2, ...]
+    // preRoles: 预分配身份数组 (5/8人模式时由选角阶段传入)
     // 兼容旧接口：如果 heroIds 不存在，则 humanHeroId = gameMode，使用旧的1v1逻辑
     if (!Array.isArray(heroIds)) {
       return this.initOld(gameMode);
@@ -522,16 +523,23 @@ class Game {
       judgeArea: [],
       isHuman: i === 0,
       alive: true,
-      role: null,
+      role: (preRoles && preRoles[i]) ? preRoles[i] : null,
     }));
 
-    // 5人或8人模式：分配身份（在座位分配前，此时 players[0] 是人类）
+    // 5人或8人模式：分配身份（已在选角阶段预分配则跳过）
     if (gameMode >= 5) {
-      const rolePool = buildRolePool(gameMode);
-      this.shuffle(rolePool);
-      this.players.forEach((p, i) => { p.role = rolePool[i]; });
-      const humanRole = this.players[0].role;
-      this.addLog(`你的身份：${getRoleDisplayName(humanRole)}`, 'important');
+      if (preRoles && preRoles.length === this.players.length) {
+        // 使用选角阶段预分配的身份
+        const humanRole = this.players.find(p => p.isHuman).role;
+        this.addLog(`你的身份：${getRoleDisplayName(humanRole)}`, 'important');
+      } else {
+        // 兼容旧入口：随机分配身份
+        const rolePool = buildRolePool(gameMode);
+        this.shuffle(rolePool);
+        this.players.forEach((p, i) => { p.role = rolePool[i]; });
+        const humanRole = this.players.find(p => p.isHuman).role;
+        this.addLog(`你的身份：${getRoleDisplayName(humanRole)}`, 'important');
+      }
     }
 
     // 随机分配座位号（所有玩家随机入座，然后按座位排序保证出牌顺序）
@@ -2407,9 +2415,9 @@ class Game {
     html += '<div class="hero-header">';
     html += `<div class="hero-avatar ${player.hero.avatarClass}">${player.hero.name[0]}</div>`;
     html += `<div><div class="hero-name">${player.hero.name}</div><div class="hero-title">${player.hero.title}</div><div class="hero-faction">${player.hero.faction}</div>`;
-    // 显示身份：人类玩家始终可见，其他人死亡后公开
+    // 显示身份：人类玩家始终可见，主公始终公开，其他人死亡后公开
     if (this.gameMode >= 5 && player.role) {
-      const showRole = player.isHuman || this.rolesRevealed[player.id] || this.gameOver;
+      const showRole = player.isHuman || this.rolesRevealed[player.id] || this.gameOver || player.role === 'zhugong';
       const roleInfo = ROLES[player.role];
       html += `<div style="font-size:10px;color:${roleInfo.color};margin-top:2px;">`;
       html += showRole ? `${roleInfo.icon} ${roleInfo.name}` : `❓ 未知`;
@@ -2612,18 +2620,15 @@ let heroPickState = null;
 function startHeroPick(gameMode) {
   const totalPlayers = gameMode === 1 ? 3 : gameMode;
   const allHeroIds = Object.keys(HEROES);
-  const shuffled = [...allHeroIds];
-  // 简单洗牌
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-  }
 
   // 为每个玩家随机分配3个候选英雄（不重复）
   const pool = [...allHeroIds];
+  for (let k = pool.length - 1; k > 0; k--) {
+    const j = Math.floor(Math.random() * (k + 1));
+    [pool[k], pool[j]] = [pool[j], pool[k]];
+  }
   const choices = [];
   for (let i = 0; i < totalPlayers; i++) {
-    // 洗牌取3个
     for (let k = pool.length - 1; k > 0; k--) {
       const j = Math.floor(Math.random() * (k + 1));
       [pool[k], pool[j]] = [pool[j], pool[k]];
@@ -2631,11 +2636,36 @@ function startHeroPick(gameMode) {
     choices.push(pool.slice(0, 3));
   }
 
-  heroPickState = { gameMode, choices, picked: new Array(totalPlayers).fill(null), totalPlayers };
-  showHumanHeroPick(choices[0], gameMode);
+  // 5人或8人模式：预分配身份，确定主公
+  let roles = null;
+  let lordIdx = -1;
+  let lordHero = null;
+  if (gameMode >= 5) {
+    const rolePool = buildRolePool(gameMode);
+    // 洗牌身份
+    for (let i = rolePool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [rolePool[i], rolePool[j]] = [rolePool[j], rolePool[i]];
+    }
+    roles = rolePool;
+    lordIdx = rolePool.indexOf('zhugong');
+
+    // 主公是AI：自动选将（优先选体力最高的）
+    if (lordIdx > 0) {
+      const lordChoices = [...choices[lordIdx]];
+      lordChoices.sort((a, b) => HEROES[b].maxHp - HEROES[a].maxHp);
+      lordHero = lordChoices[0];
+    }
+  }
+
+  const picked = new Array(totalPlayers).fill(null);
+  if (lordHero) picked[lordIdx] = lordHero;
+
+  heroPickState = { gameMode, choices, picked, totalPlayers, roles, lordIdx, lordHero };
+  showHumanHeroPick(choices[0], gameMode, lordHero, lordIdx);
 }
 
-function showHumanHeroPick(heroChoices, gameMode) {
+function showHumanHeroPick(heroChoices, gameMode, lordHero, lordIdx) {
   const app = document.getElementById('app');
   let cardsHtml = '';
   heroChoices.forEach(hId => {
@@ -2657,11 +2687,35 @@ function showHumanHeroPick(heroChoices, gameMode) {
     </div>`;
   });
 
+  // 主公信息栏
+  let lordInfoHtml = '';
+  if (lordIdx === 0) {
+    // 人类是主公
+    lordInfoHtml = `<div style="background:rgba(240,208,96,0.12);border:2px solid #f0d060;border-radius:14px;padding:16px 28px;text-align:center;margin-bottom:8px;">
+      <div style="font-size:18px;color:#f0d060;font-weight:bold;">👑 你是主公</div>
+      <div style="font-size:12px;color:#c0a060;margin-top:4px;">主公身份公开，请谨慎选将</div>
+    </div>`;
+  } else if (lordHero && lordIdx > 0) {
+    // AI是主公，展示其已选武将
+    const lh = HEROES[lordHero];
+    lordInfoHtml = `<div style="background:rgba(240,208,96,0.12);border:2px solid #f0d060;border-radius:14px;padding:16px 28px;text-align:center;margin-bottom:8px;">
+      <div style="font-size:16px;color:#f0d060;font-weight:bold;">👑 主公已选择</div>
+      <div style="display:flex;align-items:center;justify-content:center;gap:14px;margin-top:10px;">
+        <div class="hero-avatar ${lh.avatarClass}" style="width:52px;height:52px;font-size:24px;margin:0;">${lh.name[0]}</div>
+        <div style="text-align:left;">
+          <div style="font-size:19px;font-weight:bold;color:#f0d060;">${lh.name}</div>
+          <div style="font-size:12px;color:#c0a060;">${lh.title} · ${'❤️'.repeat(lh.maxHp)}</div>
+        </div>
+      </div>
+    </div>`;
+  }
+
   const modeNames = { 1: '1v1 混战模式', 5: '五人身份局', 8: '八人身份局' };
   app.innerHTML = `
     <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;gap:25px;padding:20px;">
       <h1 style="font-size:30px;color:#f0d060;text-shadow:0 0 20px rgba(240,208,96,0.5);">🎯 选择武将</h1>
       <p style="color:#c0a060;font-size:15px;">${modeNames[gameMode] || gameMode + '人局'} — 从3名武将中选择一位</p>
+      ${lordInfoHtml}
       <div style="display:flex;gap:25px;flex-wrap:wrap;justify-content:center;">
         ${cardsHtml}
       </div>
@@ -2674,28 +2728,27 @@ function confirmHeroPick(heroId) {
   if (!heroPickState) return;
   heroPickState.picked[0] = heroId;
 
-  // AI自动选将：选体力最高的
-  const pickedHeroIds = [heroId];
+  // AI自动选将：跳过已选的主公槽位
+  const pickedHeroIds = [...heroPickState.picked]; // 包含主公已选
   for (let i = 1; i < heroPickState.totalPlayers; i++) {
+    if (pickedHeroIds[i]) continue; // 主公(非人类)已自动选
     const choices = heroPickState.choices[i].filter(h => !pickedHeroIds.includes(h));
     if (choices.length > 0) {
-      // AI 优先选高体力
       choices.sort((a, b) => HEROES[b].maxHp - HEROES[a].maxHp);
-      pickedHeroIds.push(choices[0]);
+      pickedHeroIds[i] = choices[0];
     } else {
-      // 候选都被选了，随机选一个
       const remaining = Object.keys(HEROES).filter(h => !pickedHeroIds.includes(h));
-      pickedHeroIds.push(remaining[Math.floor(Math.random() * remaining.length)]);
+      pickedHeroIds[i] = remaining[Math.floor(Math.random() * remaining.length)];
     }
-    heroPickState.picked[i] = pickedHeroIds[i];
   }
 
+  const preRoles = heroPickState.roles;
   heroPickState = null;
   const mode = pickedHeroIds.length >= 5 ? pickedHeroIds.length : 1;
   document.getElementById('app').innerHTML = '';
   game = new Game();
   window.game = game;
-  game.init(mode, pickedHeroIds);
+  game.init(mode, pickedHeroIds, preRoles);
   game.render();
 }
 
