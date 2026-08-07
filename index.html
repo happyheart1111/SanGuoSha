@@ -2708,8 +2708,19 @@ function startHeroPick(gameMode) {
   const picked = new Array(totalPlayers).fill(null);
   if (lordHero) picked[lordIdx] = lordHero;
 
+  // 若主公AI已先选将，从人类候选池中排除该武将，避免重复
+  let humanChoices = [...choices[0]];
+  if (lordHero) {
+    humanChoices = humanChoices.filter(h => h !== lordHero);
+    while (humanChoices.length < 3) {
+      const extra = allHeroIds.find(h => !humanChoices.includes(h) && !picked.includes(h));
+      if (extra) humanChoices.push(extra);
+      else break;
+    }
+  }
+
   heroPickState = { gameMode, choices, picked, totalPlayers, roles, lordIdx, lordHero };
-  showHumanHeroPick(choices[0], gameMode, lordHero, lordIdx);
+  showHumanHeroPick(humanChoices, gameMode, lordHero, lordIdx);
 }
 
 function showHumanHeroPick(heroChoices, gameMode, lordHero, lordIdx) {
