@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>三国杀 - 群雄争霸</title>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body {
@@ -450,6 +451,56 @@ body::before {
   .player-slot { padding: 6px; }
   .game-board { padding: 8px 4px; gap: 8px; }
 }
+
+/* ========== PvP 联机大厅 ========== */
+.pvp-lobby {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  min-height: 100vh; gap: 24px; padding: 20px;
+}
+.pvp-room-code {
+  font-size: 36px; font-weight: bold; color: #f0d060;
+  letter-spacing: 8px; background: rgba(0,0,0,0.5);
+  border: 3px dashed #f0d060; border-radius: 14px;
+  padding: 16px 36px; text-align: center;
+  cursor: pointer; transition: all 0.3s;
+}
+.pvp-room-code:hover { background: rgba(240,208,96,0.1); }
+.pvp-input {
+  background: rgba(0,0,0,0.5); border: 2px solid #8b6914; border-radius: 10px;
+  padding: 12px 20px; font-size: 20px; color: #f0d060; text-align: center;
+  letter-spacing: 4px; width: 200px; outline: none; font-weight: bold;
+  transition: all 0.3s;
+}
+.pvp-input:focus { border-color: #f0d060; box-shadow: 0 0 15px rgba(240,208,96,0.3); }
+.pvp-input::placeholder { color: #605030; letter-spacing: 2px; }
+.pvp-status {
+  font-size: 14px; color: #60c0ff; text-align: center; min-height: 24px;
+  padding: 8px 16px; background: rgba(0,0,0,0.3); border-radius: 8px;
+}
+.pvp-status.error { color: #ff6060; }
+.pvp-status.success { color: #60ff80; }
+.pvp-btn-row { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; }
+.btn-outline {
+  padding: 10px 24px; background: transparent; border: 2px solid #8b6914;
+  border-radius: 10px; color: #c0a060; font-size: 15px; cursor: pointer;
+  transition: all 0.3s; font-weight: bold;
+}
+.btn-outline:hover { border-color: #f0d060; color: #f0d060; }
+.pvp-badge {
+  position: fixed; top: 10px; right: 10px; z-index: 100;
+  background: rgba(0,180,255,0.15); border: 1px solid rgba(0,180,255,0.4);
+  border-radius: 8px; padding: 4px 10px; font-size: 11px; color: #60c0ff;
+  display: flex; align-items: center; gap: 6px;
+}
+.pvp-badge .dot {
+  width: 8px; height: 8px; border-radius: 50%; background: #60ff80;
+  animation: blink 1.5s ease-in-out infinite;
+}
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+.pvp-badge .dot.disconnected { background: #ff4040; animation: none; }
 </style>
 </head>
 <body>
@@ -464,6 +515,8 @@ body::before {
 <script src="heroes.js"></script>
 <script src="cards.js"></script>
 <script src="roles.js"></script>
+<script src="prng.js"></script>
+<script src="pvp.js"></script>
 <script>
 // ==================== 游戏引擎 ====================
 
@@ -498,6 +551,162 @@ class Game {
     this.kejiEligible = true;
     this.extraShaChances = 0;
     this.tuxiUsedThisTurn = false;
+    // PvP 相关
+    this._isPvP = false;
+    this._pvpWaitingForRemote = false;
+    this._pvpRemoteActionQueue = [];
+    this._pvpHostHero = null;
+    this._pvpGuestHero = null;
+    this._pvpHeroPool = null;
+    this._pvpTotalPlayers = 0;
+    this._pvpGameMode = 0;
+    this._pvpActionOverrides = {};
+    this._pvpPendingAOE = null;
+    this._pvpPendingJuedou = null;
+    this._pvpHostHumanId = 0;
+    this._pvpGuestHumanId = 1;
+  }
+  
+  // ========== PvP 初始化 ==========
+  initPvP(gameMode, totalPlayers, heroPool, hostHeroId, guestHeroId) {
+    this.gameMode = gameMode;
+    this._isPvP = true;
+    
+    // 构建英雄列表：0=主机, 1=客机, 其余=AI随机
+    const humanHeroIds = [hostHeroId, guestHeroId];
+    const usedHeroes = new Set([hostHeroId, guestHeroId]);
+    const aiHeroes = heroPool.filter(h => !usedHeroes.has(h));
+    
+    const heroIds = [];
+    for (let i = 0; i < totalPlayers; i++) {
+      if (i === 0) heroIds.push(hostHeroId);
+      else if (i === 1 && totalPlayers > 1) heroIds.push(guestHeroId);
+      else {
+        if (aiHeroes.length > 0) {
+          heroIds.push(aiHeroes.shift());
+        } else {
+          const allIds = Object.keys(HEROES);
+          const avail = allIds.filter(id => !usedHeroes.has(id));
+          if (avail.length > 0) {
+            const pick = avail[Math.floor(Math.random() * avail.length)];
+            usedHeroes.add(pick);
+            heroIds.push(pick);
+          }
+        }
+      }
+    }
+    
+    this.heroIdList = [...heroIds];
+    this.rolesRevealed = {};
+    this.winningTeam = null;
+    
+    // 预分配身份（5人+模式）
+    let preRoles = null;
+    if (gameMode >= 5) {
+      const rolePool = buildRolePool(gameMode);
+      for (let i = rolePool.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [rolePool[i], rolePool[j]] = [rolePool[j], rolePool[i]];
+      }
+      preRoles = rolePool;
+    }
+    
+    // 创建玩家 — 使用数字ID，0=主机人类，1=客机人类
+    this.players = heroIds.map((hId, i) => {
+      const hero = HEROES[hId];
+      return {
+        id: i,
+        hero: hero,
+        hp: hero.hp || hero.maxHp,
+        maxHp: hero.maxHp || hero.hp,
+        hand: [],
+        equipment: { weapon: null, armor: null, plusHorse: null, minusHorse: null },
+        judgeArea: [],
+        isHuman: i < 2,
+        isAI: i >= 2,
+        alive: true,
+        linked: false,
+        role: (preRoles && preRoles[i]) ? preRoles[i] : null,
+        seat: i,
+        deckPosition: i,
+      };
+    });
+    
+    // 身份局：人类玩家查看身份
+    if (gameMode >= 5) {
+      const humanRole = this.players[0].role;
+      this.addLog(`你的身份：${getRoleDisplayName(humanRole)}`, 'important');
+    }
+    
+    // 初始化牌组
+    this.initDeck();
+    this.dealInitialCards();
+    this.currentPlayerIdx = 0;
+    this.phase = 'idle';
+    this.logEntries = [];
+    this.shaUsedThisTurn = false;
+    this.gameOver = false;
+  }
+  
+  // ========== PvP 状态恢复（客机） ==========
+  importPvPState(state) {
+    this._isPvP = true;
+    this.gameMode = state.gameMode;
+    this.heroIdList = state.players.map(p => HEROES[p.heroId] ? p.heroId : Object.keys(HEROES)[0]);
+    this.rolesRevealed = { ...state.rolesRevealed };
+    this.winningTeam = state.winningTeam;
+    this.currentPlayerIdx = state.currentPlayerIdx;
+    this.phase = state.phase;
+    this.shaUsedThisTurn = state.shaUsedThisTurn || false;
+    this.gameOver = state.gameOver;
+    
+    // 重建玩家
+    this.players = state.players.map((sp, i) => {
+      const hero = HEROES[sp.heroId] || Object.values(HEROES)[0];
+      return {
+        id: i,
+        hero: hero,
+        hp: sp.hp,
+        maxHp: sp.maxHp,
+        hand: sp.hand ? sp.hand.map(c => this._reconstructCard(c)) : [],
+        equipment: { ...sp.equipment },
+        judgeArea: sp.judgeArea ? sp.judgeArea.map(c => this._reconstructCard(c)) : [],
+        isHuman: sp.isHuman,
+        isAI: !sp.isHuman,
+        alive: sp.alive,
+        linked: sp.linked,
+        role: sp.role || null,
+        seat: sp.seat || i,
+        deckPosition: sp.seat || i,
+      };
+    });
+    
+    this.logEntries = (state.logEntries || []).map(l => ({
+      text: l.text || l,
+      type: l.type || 'normal',
+    }));
+  }
+  
+  // ========== 从序列化数据重建卡牌对象 ==========
+  _reconstructCard(data) {
+    if (!data) return null;
+    // 尝试从卡牌库匹配
+    const def = CARD_DEF[data.id];
+    if (def) {
+      const card = { ...def };
+      card.suit = data.suit || card.suit;
+      card.number = data.number || card.number;
+      return card;
+    }
+    // 降级：直接用数据构建
+    return {
+      id: data.id || 'unknown',
+      name: data.name || '未知',
+      type: data.type || 'unknown',
+      category: data.category || 'unknown',
+      suit: data.suit || 'none',
+      number: data.number || 0,
+    };
   }
 
   init(gameMode, heroIds, preRoles) {
@@ -676,6 +885,182 @@ class Game {
     this.shuffle(this.deck);
   }
 
+  // ========== PvP 远程动作处理 ==========
+  
+  _pvpRemotePlayCard(payload) {
+    const { playerId, cardIdx, targetPlayerIdx, equipSlot: eSlot } = payload;
+    const player = this.players[playerId];
+    if (!player || !player.alive) return;
+    
+    const card = player.hand[cardIdx];
+    if (!card) return;
+    
+    // 根据卡牌类型，我们需要触发本地播放逻辑
+    // 由于 guest 端也需要模拟主机端的动作，这里调用对应的 resolve 方法
+    if (card.type === 'basic') {
+      if (card.id === 'sha') {
+        // 杀 - 需要找到目标
+        if (targetPlayerIdx !== undefined && this.players[targetPlayerIdx]) {
+          this._pvpPlayShaRemote(player, card, cardIdx, this.players[targetPlayerIdx]);
+        }
+      } else if (card.id === 'tao') {
+        player.hand.splice(cardIdx, 1);
+        this.heal(player, 1);
+        this.render();
+      } else if (card.id === 'jiu') {
+        this.resolveJiu(player, cardIdx);
+      }
+    } else if (card.type === 'trick') {
+      if (targetPlayerIdx !== undefined) {
+        this._pvpPlayTrickRemote(player, card, cardIdx, this.players[targetPlayerIdx], eSlot);
+      }
+    } else if (card.type === 'equip') {
+      this._pvpEquipRemote(player, card, cardIdx);
+    }
+  }
+  
+  _pvpPlayShaRemote(player, card, cardIdx, target) {
+    player.hand.splice(cardIdx, 1);
+    this.discardPile.push(card);
+    
+    if (this.gameMode === 1) {
+      target = this.players.find(p => p.id !== player.id && p.alive);
+      if (!target) return;
+    }
+    
+    // 检查目标是否有闪
+    const shanCard = target.hand.find(c => c.id === 'shan');
+    if (!shanCard) {
+      this.dealDamage(target, 1);
+      this.render();
+    }
+    // 如果有闪，AI玩家自动使用，人类玩家等待
+  }
+  
+  _pvpPlayTrickRemote(player, card, cardIdx, target, equipSlot) {
+    player.hand.splice(cardIdx, 1);
+    if (card.id === 'guohe') {
+      if (equipSlot) {
+        // 弃置装备
+        target.equipment[equipSlot] = null;
+        this.discardPile.push(card);
+      } else {
+        this.discardPile.push(card);
+      }
+    } else if (card.id === 'shunshou') {
+      if (equipSlot) {
+        player.equipment[equipSlot] = target.equipment[equipSlot];
+        target.equipment[equipSlot] = null;
+      }
+    }
+    this.render();
+  }
+  
+  _pvpEquipRemote(player, card, cardIdx) {
+    player.hand.splice(cardIdx, 1);
+    const slot = card.equipSlot;
+    if (slot && player.equipment[slot] !== undefined) {
+      if (player.equipment[slot]) {
+        this.discardPile.push(player.equipment[slot]);
+      }
+      player.equipment[slot] = card;
+    }
+    this.render();
+  }
+  
+  _pvpRemoteRespond(payload) {
+    const { playerId, cardIdx } = payload;
+    this._pvpRespondData = { playerId, cardIdx }; // 存储响应数据供后续使用
+  }
+  
+  _pvpRemoteEndPhase(payload) {
+    const { playerId } = payload;
+    this._pvpNextPhase = true; // 标记推进阶段
+  }
+  
+  _pvpRemotePlayShan(payload) {
+    const { playerId, cardIdx } = payload;
+    this._pvpShanData = { playerId, cardIdx };
+  }
+  
+  _pvpRemoteUseSkill(payload) {
+    this._pvpSkillData = payload;
+  }
+  
+  _pvpRemoteHeroPick(payload) {
+    this._pvpHeroPickData = payload;
+  }
+  
+  _pvpRemoteGuoheDiscard(payload) {
+    this._pvpGuoheData = payload;
+  }
+  
+  _pvpRemoteShunshouSteal(payload) {
+    this._pvpShunshouData = payload;
+  }
+  
+  _pvpRemoteTiesuoSelect(payload) {
+    this._pvpTiesuoData = payload;
+  }
+  
+  _pvpRemoteTiesuoReforge(payload) {
+    this._pvpTiesuoReforgeDone = true;
+  }
+  
+  _pvpRemoteHuogongShow(payload) {
+    this._pvpHuogongShowData = payload;
+  }
+  
+  _pvpRemoteHuogongDiscard(payload) {
+    this._pvpHuogongDiscardData = payload;
+  }
+  
+  _pvpRemoteFangzhuChoice(payload) {
+    this._pvpFangzhuData = payload;
+  }
+  
+  _pvpRemoteJianxiongChoice(payload) {
+    this._pvpJianxiongData = payload;
+  }
+  
+  _pvpRemoteTianduChoice(payload) {
+    this._pvpTianduData = payload;
+  }
+  
+  _pvpRemoteLeijiChoice(payload) {
+    this._pvpLeijiData = payload;
+  }
+  
+  _pvpRemoteDiscardCards(payload) {
+    this._pvpDiscardData = payload;
+  }
+  
+  _pvpRemoteAiAction(payload) {
+    // 仅客机处理：主机发来的AI动作
+    if (pvpManager && !pvpManager.isHost) {
+      this._pvpAiActionData = payload;
+    }
+  }
+
+  // ========== PvP 状态同步 ==========
+  _pvpSyncState() {
+    if (!this._isPvP || !pvpManager || !pvpManager.connected) return;
+    if (!pvpManager.isHost) return;
+    
+    const state = serializeGameState(this);
+    // 为客机暴露手牌
+    state.players.forEach(p => {
+      if (p.id === 1) {
+        const gp = this.players[1];
+        if (gp && gp.isHuman) {
+          p.hand = gp.hand.map(c => ({ id: c.id, name: c.name, suit: c.suit, number: c.number, type: c.type, category: c.category }));
+        }
+      }
+    });
+    state._pvpMode = true;
+    pvpManager.sendAction('stateSync', state);
+  }
+
   shuffle(arr) {
     for (let i = arr.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
@@ -756,6 +1141,25 @@ class Game {
     this.gongxinUsedThisTurn = false;
     this.kejiEligible = true;
     this.extraShaChances = player.equipment.weapon && player.equipment.weapon.id === 'liannu' ? 999 : 0;
+    
+    // PvP 模式：判断是否需要等待远程玩家
+    if (this._isPvP) {
+      const isHost = pvpManager && pvpManager.isHost;
+      const localPlayerId = isHost ? 0 : 1;
+      const remotePlayerId = isHost ? 1 : 0;
+      
+      if (player.isHuman && player.id !== localPlayerId) {
+        // 这是远程人类玩家的回合，等待对方行动
+        this._pvpWaitingForRemote = true;
+        this.addLog(`—— ${player.hero.name} 的回合开始 ——`, 'important');
+        this.addLog(`等待对手行动...`, 'info');
+        this.render();
+        return;
+      }
+      
+      this._pvpWaitingForRemote = false;
+    }
+    
     this.addLog(`—— ${player.hero.name} 的回合开始 ——`, 'important');
 
     // 判定阶段 — 处理判定区的延时锦囊
@@ -809,6 +1213,12 @@ class Game {
   }
 
   goToDrawPhase(player, skipPlay) {
+    // PvP 客机：AI回合由主机同步，不自行推进
+    if (this._isPvP && pvpManager && !pvpManager.isHost && !player.isHuman) {
+      this._pvpWaitingForRemote = true;
+      this.render();
+      return;
+    }
     if (player.isHuman && !this.autoPlay) {
       setTimeout(() => this.humanDrawPhase(skipPlay), 400);
     } else {
@@ -817,6 +1227,10 @@ class Game {
   }
 
   goToPlayPhase(player, skipPlay) {
+    // PvP 客机：AI回合不自行推进
+    if (this._isPvP && pvpManager && !pvpManager.isHost && !player.isHuman) {
+      return;
+    }
     if (skipPlay) {
       this.phase = 'play';
       this.addLog(`${player.hero.name}跳过出牌阶段`);
@@ -853,6 +1267,7 @@ class Game {
     }
     this.phase = 'play';
     this.render();
+    this._pvpSyncState();
     this.goToPlayPhase(player, skipPlay);
   }
 
@@ -1021,7 +1436,18 @@ class Game {
     const player = this.players[this.currentPlayerIdx];
     const effectiveType = effectiveTypeOverride || card.type;
     this.discardCard(player, card);
-
+    
+    // PvP 广播
+    if (this._isPvP && player.isHuman) {
+      pvpBroadcast(this, 'playCard', {
+        playerId: player.id,
+        cardIdx: player.hand.findIndex(c => c.id === card.id), // 可能已经出牌了，找原始的
+        cardId: card.id,
+        cardType: card.type,
+        targetPlayerId: target ? target.id : -1,
+        effectiveType: effectiveType,
+      });
+    }
     const isWushengSha = (player.hero.id === 'guanyu' && card.type !== 'sha' && effectiveType === 'sha');
     const desc = isWushengSha ? `将${card.suit}【${card.name}】当【杀】使用` : `使用了【${card.name}】`;
     this.addLog(`${player.hero.name}${desc}${target ? '，目标是' + target.hero.name : ''}`, isWushengSha ? 'skill' : '');
@@ -1052,6 +1478,7 @@ class Game {
     // 吕蒙克己
     if (effectiveType === 'sha') this.kejiEligible = false;
     if (!this.gameOver) this.render();
+    this._pvpSyncState();
   }
 
   // ==================== 卡牌效果结算 ====================
@@ -1122,6 +1549,7 @@ class Game {
       this.dealDamage(target, source, 1, card);
     }
     this.render();
+    this._pvpSyncState();
   }
 
   humanUseBaguazhen() {
@@ -1704,6 +2132,7 @@ class Game {
       }
     }
     this.checkGameOver();
+    this._pvpSyncState();
   }
 
   triggerJianxiong(target, card) {
@@ -2102,6 +2531,10 @@ class Game {
   }
 
   goToDiscardPhase(player) {
+    // PvP 客机：AI回合不自行推进
+    if (this._isPvP && pvpManager && !pvpManager.isHost && !player.isHuman) {
+      return;
+    }
     this.phase = 'discard';
     // 吕蒙克己：没出过杀可跳过弃牌
     const kejiSkip = player.hero.id === 'lvmeng' && this.kejiEligible;
@@ -2141,6 +2574,11 @@ class Game {
   endPlayPhase() {
     this.phase = 'discard';
     const player = this.players[this.currentPlayerIdx];
+    
+    // PvP 广播
+    if (this._isPvP && player.isHuman) {
+      pvpBroadcast(this, 'endPhase', { playerId: player.id, phase: 'discard' });
+    }
     // 吕蒙克己：没出过杀跳过弃牌
     const kejiSkip = player.hero.id === 'lvmeng' && this.kejiEligible;
     if (kejiSkip) {
@@ -2162,6 +2600,11 @@ class Game {
     if (this.phase !== 'play') return;
     this.phase = 'discard';
     const player = this.players[this.currentPlayerIdx];
+    
+    // PvP 广播
+    if (this._isPvP && player.isHuman) {
+      pvpBroadcast(this, 'endPhase', { playerId: player.id, phase: 'discard' });
+    }
     // 神周瑜琴音：弃牌阶段结束时触发
     const qinyinPlayer = player.hero.id === 'shen-zhouyu' ? player : null;
     // 吕蒙克己
@@ -2277,6 +2720,9 @@ class Game {
     this.selectedCardIdx = -1;
     this.shaUsedThisTurn = false;
     this.zhihengUsedThisTurn = false;
+    
+    // PvP 状态同步
+    this._pvpSyncState();
     this.jieyinUsedThisTurn = false;
     this.render();
     setTimeout(() => this.startCurrentTurn(), 800);
@@ -2312,14 +2758,25 @@ class Game {
       this.winningTeam = result.team + '';
       this.addLog('====================================', 'important');
       this.addLog(result.msg, 'important');
-      const humanP = this.players.find(p => p.isHuman);
-      const humanWin = result.winners.some(w => w.id === humanP.id);
-      if (humanWin) this.addLog('恭喜你赢得了比赛！', 'important');
-      else this.addLog('你输了…再接再厉！', 'damage');
+      if (this._isPvP) {
+        // PvP 模式：为双方显示不同消息
+        const isHost = pvpManager && pvpManager.isHost;
+        const myIdx = isHost ? 0 : 1;
+        const myPlayer = this.players.find(p => p.id === myIdx);
+        const myWin = result.winners.some(w => w.id === myPlayer.id);
+        if (myWin) this.addLog('恭喜你赢得了比赛！', 'important');
+        else this.addLog('你输了…再接再厉！', 'damage');
+      } else {
+        const humanP = this.players.find(p => p.isHuman);
+        const humanWin = result.winners.some(w => w.id === humanP.id);
+        if (humanWin) this.addLog('恭喜你赢得了比赛！', 'important');
+        else this.addLog('你输了…再接再厉！', 'damage');
+      }
       // 揭示所有身份
       this.players.forEach(p => { this.rolesRevealed[p.id] = true; });
       this.autoPlay = false;
       this.render();
+      this._pvpSyncState();
     }
   }
 
@@ -2329,6 +2786,16 @@ class Game {
   }
 
   // ==================== 渲染 ====================
+
+  // ========== PvP 连接状态徽章 ==========
+  _renderPvPBadge() {
+    if (!this._isPvP) return '';
+    const connected = pvpManager && pvpManager.connected;
+    return `<span class="pvp-badge">
+      <span class="dot${connected ? '' : ' disconnected'}"></span>
+      ${connected ? '联机中' : '断开连接'}
+    </span>`;
+  }
 
   render() {
     const app = document.getElementById('app');
@@ -2346,13 +2813,15 @@ class Game {
       <div class="game-info">
         ${this.gameMode >= 5 ? getGameModeName(this.gameMode) + ' · ' : ''}
         回合: ${player ? player.hero.name : ''}
-        ${this.gameMode >= 5 && humanPlayer.role ? ` · 你的身份: ${getRoleDisplayName(humanPlayer.role)}` : ''}
+        ${this.gameMode >= 5 && humanPlayer && humanPlayer.role ? ` · 你的身份: ${getRoleDisplayName(humanPlayer.role)}` : ''}
         ${isAutoTurn ? ' <span style="color:#60ff80;">[托管中]</span>' : ''}
+        ${this._isPvP ? ' <span style="color:#60c0ff;">[PvP]</span>' : ''}
       </div>
       <div class="deck-info">
         <span class="deck-count">牌堆: ${this.deck.length} | 弃牌: ${this.discardPile.length}</span>
         <div class="deck-visual">牌<br>堆</div>
       </div>
+      ${this._isPvP ? this._renderPvPBadge() : ''}
     </div>`;
 
     // 平铺牌局
@@ -2638,8 +3107,13 @@ class Game {
 
     // 游戏结束弹窗
     if (this.gameOver) {
-      const hu = this.players.find(p => p.isHuman);
-      let isWin, resultMsg;
+      let hu, isWin, resultMsg;
+      if (this._isPvP) {
+        const myIdx = (pvpManager && pvpManager.isHost) ? 0 : 1;
+        hu = this.players.find(p => p.id === myIdx) || this.players.find(p => p.isHuman);
+      } else {
+        hu = this.players.find(p => p.isHuman);
+      }
       if (this.gameMode >= 5) {
         const humanWin = (this.winningTeam === 'zhugong' && (hu.role === 'zhugong' || hu.role === 'zhongchen'))
                        || (this.winningTeam === 'fanzei' && hu.role === 'fanzei')
@@ -2649,7 +3123,7 @@ class Game {
         resultMsg = `获胜阵营：${teamNames[this.winningTeam] || '未知'}`;
       } else {
         const alive = this.players.filter(p => p.alive);
-        isWin = alive.length > 0 && alive[0].isHuman;
+        isWin = alive.length > 0 && (this._isPvP ? hu.alive : alive[0].isHuman);
         resultMsg = alive.length > 0 ? alive[0].hero.name + ' 获得了最终胜利！' : '全员阵亡！';
       }
       html += `
@@ -2666,8 +3140,8 @@ class Game {
         }
         html += '</div>';
       }
-      html += `<button class="btn" onclick="game.restart()" style="margin:5px;">再来一局（同一武将）</button>
-          <button class="btn" onclick="showHeroSelect()" style="margin:5px;">选择新武将</button>
+      html += `${!this._isPvP ? `<button class="btn" onclick="game.restart()" style="margin:5px;">再来一局（同一武将）</button>` : ''}
+          <button class="btn" onclick="showHeroSelect()" style="margin:5px;">${this._isPvP ? '返回大厅' : '选择新武将'}</button>
         </div>
       </div>`;
     }
@@ -2884,6 +3358,13 @@ function showHeroSelect() {
 }
 
 function showGameModeSelect() {
+  // 清理 PvP 连接
+  if (pvpManager) {
+    pvpManager.disconnect();
+    pvpManager = null;
+  }
+  pvpMode = null;
+  
   const app = document.getElementById('app');
   app.innerHTML = `
     <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;gap:30px;padding:20px;">
@@ -2921,8 +3402,629 @@ function showGameModeSelect() {
           <div style="font-size:12px;color:#a08050;">1主2忠4反1内 · 身份隐藏</div>
         </div>
       </div>
+      <div style="margin-top:10px;text-align:center;">
+        <div onclick="showPvPLobby()" style="
+          display:inline-block;padding:18px 44px;background:linear-gradient(135deg,rgba(0,102,204,0.3),rgba(0,180,255,0.2));
+          border:2px solid #3090d0;border-radius:14px;cursor:pointer;text-align:center;
+          transition:all 0.3s;
+        " onmouseover="this.style.transform='scale(1.05)';this.style.borderColor='#60c0ff';this.style.boxShadow='0 0 30px rgba(96,192,255,0.3)'"
+           onmouseout="this.style.transform='scale(1)';this.style.borderColor='#3090d0';this.style.boxShadow='none'">
+          <div style="font-size:48px;">🌐</div>
+          <div style="font-size:20px;font-weight:bold;margin:12px 0;color:#60c0ff;">PvP 联机对战</div>
+          <div style="font-size:12px;color:#5090b0;">创建/加入房间 · 双人对战</div>
+        </div>
+      </div>
     </div>
   `;
+}
+
+// ==================== PvP 联机大厅 ====================
+
+let pvpManager = null;
+let pvpMode = null; // 'host' | 'guest' | null
+let pvpGameMode = 0; // 选定的模式
+let pvpOpponentPick = null; // 对手选将
+
+function showPvPLobby() {
+  pvpManager = null;
+  pvpMode = null;
+  pvpGameMode = 0;
+  pvpOpponentPick = null;
+  document.getElementById('app').innerHTML = `
+    <div class="pvp-lobby">
+      <h2 style="color:#f0d060;font-size:28px;">🌐 PvP 联机对战</h2>
+      <div style="color:#a09070;font-size:14px;margin-bottom:8px;">
+        一人创建房间，另一人输入房间号加入
+      </div>
+      
+      <div class="pvp-btn-row">
+        <button class="btn" style="min-width:140px;background:linear-gradient(135deg,rgba(0,102,204,0.4),rgba(0,180,255,0.3));border-color:#3090d0;" 
+          onclick="pvpCreateRoom()">🏠 创建房间</button>
+        <button class="btn" style="min-width:140px;" onclick="pvpShowJoin()">🚪 加入房间</button>
+      </div>
+      
+      <div id="pvp-panel" style="margin-top:10px;width:100%;max-width:420px;"></div>
+      
+      <button class="btn-outline" onclick="showGameModeSelect()" style="margin-top:10px;">⬅ 返回主菜单</button>
+    </div>
+  `;
+}
+
+// ========== 创建房间 ==========
+function pvpCreateRoom() {
+  pvpMode = 'host';
+  renderPvpPanel();
+}
+
+// ========== 加入房间 ==========
+function pvpShowJoin() {
+  pvpMode = 'guest';
+  renderPvpPanel();
+}
+
+function renderPvpPanel() {
+  const panel = document.getElementById('pvp-panel');
+  if (!panel) return;
+  
+  if (pvpMode === 'host') {
+    panel.innerHTML = `
+      <div style="text-align:center;padding:16px;background:rgba(0,0,0,0.3);border-radius:12px;">
+        <p style="color:#a09070;margin:0 0 12px 0;">创建房间后将生成6位房间码，</p>
+        <p style="color:#a09070;margin:0 0 16px 0;">将房间码发送给对手即可加入</p>
+        <button class="btn" onclick="pvpStartHost()">创建并等待对手加入</button>
+      </div>
+    `;
+  } else if (pvpMode === 'guest') {
+    panel.innerHTML = `
+      <div style="text-align:center;padding:16px;background:rgba(0,0,0,0.3);border-radius:12px;">
+        <p style="color:#a09070;margin:0 0 10px 0;">输入主机分享的6位房间码</p>
+        <input id="pvp-room-input" class="pvp-input" placeholder="输入房间码" maxlength="6" 
+          style="text-transform:uppercase;" oninput="document.getElementById('pvp-room-input').value=this.value.toUpperCase()">
+        <div style="margin-top:12px;">
+          <button class="btn" onclick="pvpStartJoin()">加入房间</button>
+        </div>
+      </div>
+    `;
+    // 聚焦输入框
+    setTimeout(() => {
+      const inp = document.getElementById('pvp-room-input');
+      if (inp) inp.focus();
+    }, 100);
+  }
+}
+
+// ========== 等待对手 ==========
+function pvpShowWaiting(statusText) {
+  const panel = document.getElementById('pvp-panel');
+  if (!panel) return;
+  const connectingIcon = pvpMode === 'host' ? '🏠' : '🚪';
+  panel.innerHTML = `
+    <div style="text-align:center;padding:24px;background:rgba(0,0,0,0.4);border-radius:12px;">
+      <div style="font-size:36px;margin-bottom:12px;">${connectingIcon}</div>
+      <div id="pvp-status-line" class="pvp-status">${statusText || '正在连接...'}</div>
+      <div style="margin-top:10px;display:flex;align-items:center;justify-content:center;gap:6px;">
+        <div style="width:10px;height:10px;border-radius:50%;background:#60c0ff;animation:blink 0.8s ease-in-out infinite;"></div>
+        <div style="width:10px;height:10px;border-radius:50%;background:#60c0ff;animation:blink 0.8s ease-in-out 0.2s infinite;"></div>
+        <div style="width:10px;height:10px;border-radius:50%;background:#60c0ff;animation:blink 0.8s ease-in-out 0.4s infinite;"></div>
+      </div>
+      <button class="btn-outline" onclick="pvpCancel()" style="margin-top:16px;">取消</button>
+    </div>
+  `;
+}
+
+function pvpUpdateStatus(msg, isError) {
+  const el = document.getElementById('pvp-status-line');
+  if (el) {
+    el.textContent = msg;
+    el.className = 'pvp-status' + (isError ? ' error' : '');
+  }
+}
+
+function pvpCancel() {
+  if (pvpManager) { pvpManager.disconnect(); pvpManager = null; }
+  showPvPLobby();
+}
+
+// ========== 主机：开始等待 ==========
+function pvpStartHost() {
+  const game = new Game();
+  pvpManager = new PvPManager(game);
+  game.pvpManager = pvpManager;
+  
+  pvpShowWaiting('正在创建房间...');
+  
+  pvpManager.onStatus((msg) => pvpUpdateStatus(msg));
+  
+  pvpManager.onConnected(() => {
+    pvpUpdateStatus('玩家已加入！准备开始游戏...', false);
+    // 显示模式选择
+    setTimeout(() => pvpShowModeSelect(), 800);
+  });
+  
+  pvpManager.onDisconnected(() => {
+    pvpUpdateStatus('连接已断开', true);
+  });
+  
+  // 设置动作回调
+  setupPvpActionHandler(game);
+  
+  pvpManager.createRoom();
+  
+  // 显示房间码
+  setTimeout(() => {
+    const panel = document.getElementById('pvp-panel');
+    if (panel && pvpManager.roomCode) {
+      panel.innerHTML = `
+        <div style="text-align:center;">
+          <p style="color:#a09070;margin:0 0 8px 0;">房间码（点击复制）</p>
+          <div class="pvp-room-code" onclick="pvpCopyRoomCode()" 
+               title="点击复制房间码">${pvpManager.roomCode}</div>
+          <p style="color:#5090b0;font-size:12px;margin:8px 0;">将房间码发送给对手</p>
+          <div id="pvp-status-line" class="pvp-status">等待玩家加入...</div>
+          <div style="margin-top:8px;display:flex;align-items:center;justify-content:center;gap:6px;">
+            <div style="width:10px;height:10px;border-radius:50%;background:#60c0ff;animation:blink 0.8s ease-in-out infinite;"></div>
+            <div style="width:10px;height:10px;border-radius:50%;background:#60c0ff;animation:blink 0.8s ease-in-out 0.2s infinite;"></div>
+            <div style="width:10px;height:10px;border-radius:50%;background:#60c0ff;animation:blink 0.8s ease-in-out 0.4s infinite;"></div>
+          </div>
+          <button class="btn-outline" onclick="pvpCancel()" style="margin-top:14px;">取消</button>
+        </div>
+      `;
+    }
+  }, 500);
+}
+
+function pvpCopyRoomCode() {
+  if (pvpManager && pvpManager.roomCode) {
+    navigator.clipboard.writeText(pvpManager.roomCode).then(() => {
+      pvpUpdateStatus('已复制房间码！', false);
+    }).catch(() => {
+      // Fallback
+      const ta = document.createElement('textarea');
+      ta.value = pvpManager.roomCode;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      pvpUpdateStatus('已复制房间码！', false);
+    });
+  }
+}
+
+// ========== 客机：加入房间 ==========
+function pvpStartJoin() {
+  const input = document.getElementById('pvp-room-input');
+  if (!input) return;
+  const code = input.value.trim().toUpperCase();
+  if (code.length !== 6) {
+    pvpUpdateStatus('请输入6位房间码', true);
+    return;
+  }
+  
+  const game = new Game();
+  pvpManager = new PvPManager(game);
+  game.pvpManager = pvpManager;
+  
+  pvpShowWaiting('正在加入房间...');
+  
+  pvpManager.onStatus((msg) => pvpUpdateStatus(msg));
+  
+  pvpManager.onConnected(() => {
+    pvpUpdateStatus('已成功加入房间！等待主机开始游戏...', false);
+  });
+  
+  pvpManager.onDisconnected(() => {
+    pvpUpdateStatus('连接已断开', true);
+  });
+  
+  // 主机发来的 game_init 会包含初始状态
+  pvpManager.onAction((action, payload) => {
+    if (action === 'mode_select') {
+      pvpUpdateStatus('主机正在选择游戏模式...', false);
+    } else if (action === 'host_hero_picked') {
+      pvpUpdateStatus('主机已选将，轮到你了...', false);
+      // 主机选完后，客机选将
+      setTimeout(() => startPvPGuestHeroPick(payload.availableHeroes, payload.hostHeroId), 500);
+    } else if (action === 'game_init') {
+      // 接收完整游戏状态，开始游戏
+      pvpUpdateStatus('游戏开始！', false);
+      startPvPGuestGame(game, payload);
+    }
+  });
+  
+  setupPvpActionHandler(game);
+  
+  pvpManager.joinRoom(code);
+}
+
+// ========== 主机：PvP 模式选择 ==========
+function pvpShowModeSelect() {
+  const panel = document.getElementById('pvp-panel');
+  if (!panel) return;
+  panel.innerHTML = `
+    <div style="text-align:center;padding:16px;background:rgba(0,0,0,0.3);border-radius:12px;">
+      <p style="color:#f0d060;font-size:18px;margin:0 0 14px 0;">选择游戏模式</p>
+      <div class="pvp-btn-row" style="margin-bottom:10px;">
+        <button class="btn" onclick="pvpStartGame(1)" style="min-width:120px;">👤 1v1</button>
+        <button class="btn" onclick="pvpStartGame(5)" style="min-width:120px;">👥 五人局</button>
+        <button class="btn" onclick="pvpStartGame(8)" style="min-width:120px;">👥 八人局</button>
+      </div>
+      <p style="font-size:12px;color:#a09070;">你和对手各控制一名角色，其余为AI</p>
+    </div>
+  `;
+  // 通知客机
+  pvpManager.sendAction('mode_select', {});
+}
+
+// ========== 主机：PvP 开始游戏 ==========
+function pvpStartGame(gameMode) {
+  pvpGameMode = gameMode;
+  // 主机先选将
+  startPvPHostHeroPick(gameMode);
+}
+
+function startPvPHostHeroPick(gameMode) {
+  const game = pvpManager.game;
+  const totalPlayers = gameMode === 1 ? 3 : gameMode;
+  const allHeroIds = Object.keys(HEROES);
+  const pool = [...allHeroIds];
+  shuffleArray(pool);
+  // 为主机准备3个候选
+  const hostChoices = pool.slice(0, 3);
+  
+  // 存到 game 中
+  game._pvpHeroPool = pool;
+  game._pvpTotalPlayers = totalPlayers;
+  game._pvpGameMode = gameMode;
+  
+  const panel = document.getElementById('pvp-panel');
+  if (!panel) return;
+  panel.innerHTML = `
+    <div style="text-align:center;padding:16px;background:rgba(0,0,0,0.3);border-radius:12px;">
+      <p style="color:#f0d060;font-size:18px;margin:0 0 14px 0;">选择你的武将（Host）</p>
+      <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
+        ${hostChoices.map(hid => {
+          const h = HEROES[hid];
+          return `<div onclick="pvpHostPickHero('${hid}')" style="cursor:pointer;width:120px;background:rgba(0,0,0,0.4);border:2px solid #8b6914;border-radius:10px;padding:12px 8px;text-align:center;transition:all 0.3s;"
+            onmouseover="this.style.borderColor='#f0d060';this.style.transform='scale(1.05)'"
+            onmouseout="this.style.borderColor='#8b6914';this.style.transform='scale(1)'">
+            <div style="font-size:11px;color:#a09070;">${h.kingdom}</div>
+            <div style="font-size:16px;font-weight:bold;color:#f0d060;margin:6px 0;">${h.name}</div>
+            <div style="font-size:10px;color:#808080;">${h.title}</div>
+            <div style="font-size:10px;color:#5090b0;margin:4px 0;">❤ ${h.hp} HP</div>
+            <div style="font-size:9px;color:#c0a060;line-height:1.3;">${h.skills.map(s => s.name).join(' · ')}</div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+  `;
+}
+
+// ========== 主机选将 ==========
+function pvpHostPickHero(heroId) {
+  const game = pvpManager.game;
+  game._pvpHostHero = heroId;
+  
+  // 发送给客机，让客机选将
+  const allHeroIds = Object.keys(HEROES);
+  const availableForGuest = allHeroIds.filter(id => id !== heroId);
+  shuffleArray(availableForGuest);
+  const guestChoices = availableForGuest.slice(0, 3);
+  
+  pvpManager.sendAction('host_hero_picked', {
+    hostHeroId: heroId,
+    availableHeroes: guestChoices,
+  });
+  
+  // 等待客机选将
+  const panel = document.getElementById('pvp-panel');
+  if (panel) {
+    panel.innerHTML = `
+      <div style="text-align:center;padding:16px;background:rgba(0,0,0,0.3);border-radius:12px;">
+        <p style="color:#f0d060;">已选择 <span style="font-weight:bold;">${HEROES[heroId].name}</span></p>
+        <div class="pvp-status">等待对手选将...</div>
+        <div style="margin-top:8px;display:flex;align-items:center;justify-content:center;gap:6px;">
+          <div style="width:10px;height:10px;border-radius:50%;background:#60c0ff;animation:blink 0.8s ease-in-out infinite;"></div>
+          <div style="width:10px;height:10px;border-radius:50%;background:#60c0ff;animation:blink 0.8s ease-in-out 0.2s infinite;"></div>
+          <div style="width:10px;height:10px;border-radius:50%;background:#60c0ff;animation:blink 0.8s ease-in-out 0.4s infinite;"></div>
+        </div>
+      </div>
+    `;
+  }
+  
+  // 监听客机的选择
+  const prevHandler = pvpManager._onActionCallback;
+  pvpManager._onActionCallback = (action, payload) => {
+    if (action === 'guest_hero_picked') {
+      // 恢复处理器
+      pvpManager._onActionCallback = prevHandler;
+      const guestHero = payload.heroId;
+      // 设置 guest 的英雄
+      game._pvpGuestHero = guestHero;
+      // 初始化游戏
+      pvpInitHostGame(game);
+    } else if (prevHandler) {
+      prevHandler(action, payload);
+    }
+  };
+}
+
+// ========== 客机选将 ==========
+function startPvPGuestHeroPick(availableHeroes, hostHeroId) {
+  const panel = document.getElementById('pvp-panel');
+  if (!panel) return;
+  panel.innerHTML = `
+    <div style="text-align:center;padding:16px;background:rgba(0,0,0,0.3);border-radius:12px;">
+      <p style="color:#f0d060;font-size:18px;margin:0 0 4px 0;">选择你的武将</p>
+      <p style="color:#a09070;font-size:12px;margin:0 0 14px 0;">主机已选：${HEROES[hostHeroId] ? HEROES[hostHeroId].name : '?'}</p>
+      <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
+        ${availableHeroes.map(hid => {
+          const h = HEROES[hid];
+          return `<div onclick="pvpGuestPickHero('${hid}')" style="cursor:pointer;width:120px;background:rgba(0,0,0,0.4);border:2px solid #8b6914;border-radius:10px;padding:12px 8px;text-align:center;transition:all 0.3s;"
+            onmouseover="this.style.borderColor='#f0d060';this.style.transform='scale(1.05)'"
+            onmouseout="this.style.borderColor='#8b6914';this.style.transform='scale(1)'">
+            <div style="font-size:11px;color:#a09070;">${h.kingdom}</div>
+            <div style="font-size:16px;font-weight:bold;color:#f0d060;margin:6px 0;">${h.name}</div>
+            <div style="font-size:10px;color:#808080;">${h.title}</div>
+            <div style="font-size:10px;color:#5090b0;margin:4px 0;">❤ ${h.hp} HP</div>
+            <div style="font-size:9px;color:#c0a060;line-height:1.3;">${h.skills.map(s => s.name).join(' · ')}</div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+  `;
+}
+
+// ========== 客机发送选将 ==========
+function pvpGuestPickHero(heroId) {
+  pvpManager.sendAction('guest_hero_picked', { heroId: heroId });
+  
+  const panel = document.getElementById('pvp-panel');
+  if (panel) {
+    panel.innerHTML = `
+      <div style="text-align:center;padding:16px;background:rgba(0,0,0,0.3);border-radius:12px;">
+        <p style="color:#f0d060;">已选择 <span style="font-weight:bold;">${HEROES[heroId].name}</span></p>
+        <div class="pvp-status">等待主机开始游戏...</div>
+        <div style="margin-top:8px;display:flex;align-items:center;justify-content:center;gap:6px;">
+          <div style="width:10px;height:10px;border-radius:50%;background:#60c0ff;animation:blink 0.8s ease-in-out infinite;"></div>
+          <div style="width:10px;height:10px;border-radius:50%;background:#60c0ff;animation:blink 0.8s ease-in-out 0.2s infinite;"></div>
+          <div style="width:10px;height:10px;border-radius:50%;background:#60c0ff;animation:blink 0.8s ease-in-out 0.4s infinite;"></div>
+        </div>
+      </div>
+    `;
+  }
+}
+
+// ========== 主机：初始化 PvP 游戏 ==========
+function pvpInitHostGame(game) {
+  const gameMode = game._pvpGameMode;
+  const totalPlayers = game._pvpTotalPlayers;
+  const hostHero = game._pvpHostHero;
+  const guestHero = game._pvpGuestHero;
+  const pool = game._pvpHeroPool;
+  
+  // 初始化游戏 (PvP 模式，玩家0=主机，玩家1=客机)
+  game.initPvP(gameMode, totalPlayers, pool, hostHero, guestHero);
+  
+  // 序列化初始状态并发送给客机
+  const initialState = serializeGameState(game);
+  // 为客机提供自己的手牌 (玩家1)
+  initialState.players.forEach(p => {
+    if (p.id === 1 && p.isHuman) {
+      const guestPlayer = game.players[1];
+      if (guestPlayer) {
+        p.hand = guestPlayer.hand.map(c => ({ id: c.id, name: c.name, suit: c.suit, number: c.number, type: c.type, category: c.category }));
+      }
+    }
+  });
+  // 隐藏主机手牌内容，确保客机手牌存在
+  initialState.players.forEach(p => {
+    if (p.id === 0) p.hand = null;
+    if (p.id === 1 && (!p.hand || p.hand.length === 0)) {
+      const gp = game.players[1];
+      if (gp) p.hand = gp.hand.map(c => ({ id: c.id, name: c.name, suit: c.suit, number: c.number, type: c.type, category: c.category }));
+    }
+  });
+  initialState._pvpMode = true;
+  
+  pvpManager.sendGameInit(initialState);
+  
+  // 渲染主机视角
+  game.render();
+  
+  // 如果当前是客机回合，进入等待状态
+  const currentPlayer = game.players[game.currentPlayerIdx];
+  if (currentPlayer && currentPlayer.isHuman && currentPlayer.id !== 0) {
+    game._pvpWaitingForRemote = true;
+  }
+  
+  // 开始回合
+  game.startCurrentTurn();
+}
+
+// ========== 客机：开始游戏（接收主机状态） ==========
+function startPvPGuestGame(game, initialState) {
+  game.importPvPState(initialState);
+  game.render();
+  
+  // 如果当前是客机回合
+  const currentPlayer = game.players[game.currentPlayerIdx];
+  if (currentPlayer && currentPlayer.isHuman && currentPlayer.id === 1) {
+    game._pvpWaitingForRemote = false;
+  } else {
+    game._pvpWaitingForRemote = true;
+  }
+  
+  game.startCurrentTurn();
+}
+
+// ========== PvP 动作处理器 ==========
+function setupPvpActionHandler(game) {
+  game._isPvP = true;
+  
+  pvpManager.onAction((action, payload) => {
+    if (action === 'game_init' || action === 'host_hero_picked' || 
+        action === 'mode_select' || action === 'guest_hero_picked') return;
+    
+    handlePvpRemoteAction(game, action, payload);
+  });
+  
+  // PvP 断开处理
+  pvpManager.onDisconnected(() => {
+    if (!game.gameOver) {
+      game.addLog('⚠️ 对手已断开连接，游戏暂停', 'important');
+      game.render();
+    }
+  });
+}
+
+function handlePvpRemoteAction(game, action, payload) {
+  const { playerId } = payload || {};
+  
+  switch (action) {
+    case 'playCard':
+      // 远程玩家打出卡牌
+      game._pvpRemotePlayCard(payload);
+      break;
+    
+    case 'respond':
+      // 远程玩家响应
+      game._pvpRemoteRespond(payload);
+      break;
+    
+    case 'endPhase':
+      game._pvpRemoteEndPhase(payload);
+      break;
+    
+    case 'playShan':
+      game._pvpRemotePlayShan(payload);
+      break;
+    
+    case 'useSkill':
+      game._pvpRemoteUseSkill(payload);
+      break;
+    
+    case 'selectHeroPick':
+      game._pvpRemoteHeroPick(payload);
+      break;
+    
+    case 'guoheDiscard':
+      game._pvpRemoteGuoheDiscard(payload);
+      break;
+    
+    case 'shunshouSteal':
+      game._pvpRemoteShunshouSteal(payload);
+      break;
+    
+    case 'tiesuoSelect':
+      game._pvpRemoteTiesuoSelect(payload);
+      break;
+    
+    case 'tiesuoReforge':
+      game._pvpRemoteTiesuoReforge(payload);
+      break;
+    
+    case 'huogongShow':
+      game._pvpRemoteHuogongShow(payload);
+      break;
+    
+    case 'huogongDiscard':
+      game._pvpRemoteHuogongDiscard(payload);
+      break;
+    
+    case 'fangzhuChoice':
+      game._pvpRemoteFangzhuChoice(payload);
+      break;
+    
+    case 'jianxiongChoice':
+      game._pvpRemoteJianxiongChoice(payload);
+      break;
+    
+    case 'tianduChoice':
+      game._pvpRemoteTianduChoice(payload);
+      break;
+    
+    case 'leijiChoice':
+      game._pvpRemoteLeijiChoice(payload);
+      break;
+    
+    case 'discardCards':
+      game._pvpRemoteDiscardCards(payload);
+      break;
+    
+    case 'aiAction':
+      game._pvpRemoteAiAction(payload);
+      break;
+    
+    case 'stateSync':
+      // 完整状态同步（客机接收）
+      if (pvpManager && !pvpManager.isHost) {
+        applyGameState(game, payload);
+        game.render();
+        // 检查是否需要恢复回合推进
+        const cp = game.players[game.currentPlayerIdx];
+        if (cp && cp.isHuman && cp.id === 1) {
+          // 是客机回合，恢复游戏
+          game._pvpWaitingForRemote = false;
+          // 根据阶段恢复
+          if (game.phase === 'draw') {
+            setTimeout(() => game.humanDrawPhase(false), 300);
+          } else if (game.phase === 'play') {
+            game.render();
+          } else if (game.phase === 'discard') {
+            setTimeout(() => game.handleHumanDiscard(), 300);
+          }
+        }
+      }
+      break;
+    
+    default:
+      console.log('[PvP] 未处理的远程动作:', action, payload);
+  }
+}
+
+// ========== 广播动作（当前玩家调用） ==========
+function pvpBroadcast(game, action, payload) {
+  if (!game._isPvP || !pvpManager || !pvpManager.connected) return;
+  
+  // 只在本地玩家行动时广播到对方
+  const currentPlayer = game.players[game.currentPlayerIdx];
+  if (!currentPlayer) return;
+  
+  // 确定谁是我的本地玩家
+  const myPlayerIdx = pvpManager.isHost ? 0 : 1;
+  const remotePlayerIdx = pvpManager.isHost ? 1 : 0;
+  
+  const myPlayer = game.players.find(p => p.id === myPlayerIdx);
+  if (!myPlayer || !myPlayer.isHuman) return;
+  
+  // 如果是我的回合，广播动作
+  if (myPlayerIdx === currentPlayer.id) {
+    pvpManager.sendAction(action, { ...payload, playerId: myPlayerIdx });
+  }
+  // 如果是对响应或主动技能，也广播
+  else if (action === 'respond' || action === 'useSkill' || action === 'playShan' || 
+           action === 'guoheDiscard' || action === 'shunshouSteal' ||
+           action === 'huogongShow' || action === 'huogongDiscard' ||
+           action === 'fangzhuChoice' || action === 'jianxiongChoice' ||
+           action === 'tianduChoice' || action === 'leijiChoice' ||
+           action === 'discardCards') {
+    pvpManager.sendAction(action, { ...payload, playerId: myPlayerIdx });
+  }
+}
+
+// 广播 AI 动作（仅主机）
+function pvpBroadcastAiAction(game, action, payload) {
+  if (!game._isPvP || !pvpManager || !pvpManager.connected) return;
+  if (!pvpManager.isHost) return;
+  pvpManager.sendAction('aiAction', { action, payload });
+}
+
+// ========== 洗牌辅助函数 ==========
+function shuffleArray(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
 }
 
 // ==================== 选将系统 ====================
