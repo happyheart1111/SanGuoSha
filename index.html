@@ -49,64 +49,73 @@ body::before {
 
 /* ========== 环形牌桌 ========== */
 .game-table {
-  position: relative; width: 100%; height: 75vh; min-height: 520px;
+  position: relative; width: 100%; height: 78vh; min-height: 540px;
   margin: 0 auto; overflow: visible;
-  background: radial-gradient(ellipse at center, rgba(30,15,5,0.35) 0%, transparent 70%);
+  background: 
+    radial-gradient(ellipse at center, rgba(40,20,8,0.5) 0%, transparent 70%);
   border-radius: 20px;
 }
 .table-center {
   position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
-  width: 200px; height: 200px; border-radius: 50%;
+  width: 210px; height: 210px; border-radius: 50%;
   background: 
-    radial-gradient(circle at 45% 40%, #4e3822 0%, #2e1a0c 55%, #1a0e04 100%);
-  border: 4px solid #7a5020; 
+    radial-gradient(circle at 45% 38%, #524028 0%, #2e1c0e 50%, #1a0e04 100%);
+  border: 5px solid #7a4a18; 
   box-shadow: 
-    0 0 6px #5a3510, 0 0 30px rgba(0,0,0,0.6), 
-    inset 0 0 40px rgba(0,0,0,0.5), inset 0 2px 0 rgba(255,255,255,0.03);
+    0 0 8px #5a3510, 0 0 40px rgba(0,0,0,0.6), 
+    inset 0 0 50px rgba(0,0,0,0.5), inset 0 2px 0 rgba(255,220,160,0.04);
   display: flex; flex-direction: column; align-items: center; justify-content: center;
-  z-index: 1; pointer-events: none;
+  z-index: 2; pointer-events: none;
 }
 .table-center::before {
-  content: ''; position: absolute; width: 170px; height: 170px; border-radius: 50%;
-  border: 2px solid rgba(139,105,20,0.2);
+  content: ''; position: absolute; width: 175px; height: 175px; border-radius: 50%;
+  border: 3px solid rgba(122,74,24,0.35);
 }
 .table-center::after {
   content: ''; position: absolute; width: 140px; height: 140px; border-radius: 50%;
-  border: 1px solid rgba(139,105,20,0.12);
+  border: 2px solid rgba(122,74,24,0.2);
 }
 .table-logo { 
-  font-size: 32px; color: rgba(240,208,96,0.28); font-weight: bold; 
-  letter-spacing: 4px; text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+  font-size: 34px; color: rgba(240,208,96,0.25); font-weight: bold; 
+  letter-spacing: 5px; text-shadow: 0 2px 6px rgba(0,0,0,0.5);
 }
-.table-deck-info { font-size: 11px; color: #907050; margin-top: 8px; text-align: center; line-height: 1.5; }
+.table-deck-info { font-size: 11px; color: #988060; margin-top: 10px; text-align: center; line-height: 1.5; }
 
-/* ========== 英雄面板 ========== */
-.hero-panel-wrapper { z-index: 10; }
+/* ========== 英雄面板 (三国杀卡牌风) ========== */
+.hero-panel-wrapper {
+  z-index: 10;
+}
+/* 面板装饰线 - 顶边金色饰条 */
+.hero-panel-wrapper::after {
+  content: ''; position: absolute; top: -3px; left: 50%; transform: translateX(-50%);
+  width: 40px; height: 3px; background: rgba(240,208,96,0.4); border-radius: 2px;
+  pointer-events: none; z-index: 20;
+}
 .hero-panel {
-  background: linear-gradient(175deg, rgba(28,14,5,0.94), rgba(40,20,8,0.97), rgba(22,10,3,0.95));
-  border: 2px solid #5a3510; border-radius: 16px; padding: 10px 10px 8px;
-  width: 185px; position: relative; 
-  box-shadow: 0 4px 20px rgba(0,0,0,0.65), inset 0 1px 0 rgba(255,255,255,0.03);
-  transition: all 0.3s; 
+  background: linear-gradient(172deg, rgba(30,14,6,0.95), rgba(44,22,9,0.97), rgba(20,8,2,0.96));
+  border: 2px solid #5c3610; border-radius: 14px; padding: 10px 10px 8px;
+  width: 195px; position: relative;
+  box-shadow: 0 4px 22px rgba(0,0,0,0.65), inset 0 1px 0 rgba(255,220,160,0.04);
+  transition: all 0.3s ease;
 }
 .hero-panel::before {
   content: ''; position: absolute; top: 3px; left: 8px; right: 8px;
-  height: 1px; background: rgba(255,255,255,0.04); border-radius: 1px;
+  height: 1px; background: rgba(255,220,160,0.05); border-radius: 1px;
 }
 .hero-panel.active-turn { 
-  border-color: #f0d060; 
-  box-shadow: 0 0 35px rgba(240,208,96,0.55), 0 4px 20px rgba(0,0,0,0.5); 
-  animation: panelGlow 1.8s ease-in-out infinite; 
+  border-color: #e8c040;
+  box-shadow: 0 0 38px rgba(232,192,64,0.55), 0 4px 22px rgba(0,0,0,0.5);
+  animation: panelGlow 2s ease-in-out infinite; 
 }
-.hero-panel.dead { opacity: 0.4; filter: grayscale(0.8); }
+.hero-panel.dead { opacity: 0.35; filter: grayscale(0.85); }
 .hero-panel.human-panel { 
-  border-color: #f0a020; border-width: 3px; 
-  width: 200px; 
-  box-shadow: 0 4px 25px rgba(240,160,32,0.25), 0 4px 20px rgba(0,0,0,0.5);
+  border-color: #e0a028; border-width: 3px; 
+  width: 215px;
+  box-shadow: 0 4px 28px rgba(224,160,40,0.3), 0 4px 22px rgba(0,0,0,0.5);
 }
 @keyframes panelGlow {
-  0%, 100% { box-shadow: 0 0 25px rgba(240,208,96,0.4), 0 4px 20px rgba(0,0,0,0.5); }
-  50% { box-shadow: 0 0 50px rgba(240,208,96,0.75), 0 4px 20px rgba(0,0,0,0.5); }
+  0%, 100% { box-shadow: 0 0 28px rgba(232,192,64,0.4), 0 4px 22px rgba(0,0,0,0.5); }
+  50% { box-shadow: 0 0 52px rgba(232,192,64,0.75), 0 4px 22px rgba(0,0,0,0.5); }
 }
 
 /* 座位号徽章 */
@@ -234,21 +243,23 @@ body::before {
 
 /* ========== 人类手牌区 (底部) ========== */
 .human-area {
-  position: absolute; bottom: 15px; left: 50%; transform: translateX(-50%);
+  position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
   display: flex; flex-direction: column; align-items: center; z-index: 15;
-  max-width: 95%;
+  max-width: 96%;
 }
-.hand-cards-area { margin-top: 6px; }
+.human-area .hero-panel-wrapper::after { display: none; }
+.hand-cards-area { margin-top: 8px; }
 .hand-label { 
-  font-size: 12px; color: #c0a060; margin-bottom: 8px; 
-  display: flex; justify-content: space-between; flex-wrap: wrap; gap: 4px;
+  font-size: 12px; color: #c8a868; margin-bottom: 8px; 
+  display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px;
   font-weight: bold;
 }
 .hand-cards {
   display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;
-  min-height: 108px; padding: 12px; 
-  background: rgba(0,0,0,0.4); border-radius: 12px;
+  min-height: 110px; padding: 14px; 
+  background: rgba(0,0,0,0.45); border-radius: 14px;
   border: 1px solid rgba(139,105,20,0.2);
+  box-shadow: 0 2px 16px rgba(0,0,0,0.4);
 }
 
 /* ========== 精致卡牌 ========== */
@@ -400,39 +411,46 @@ body::before {
 .modal-content p { color: #c0a060; margin-bottom: 24px; font-size: 15px; line-height: 1.6; }
 
 /* ========== 响应式 ========== */
-@media (max-width: 900px) {
-  .game-table { height: 65vh; min-height: 420px; }
-  .hero-panel { width: 150px; padding: 7px; }
-  .hero-panel.human-panel { width: 165px; }
-  .hero-avatar { width: 38px; height: 38px; font-size: 18px; }
-  .hero-name { font-size: 12px; }
-  .card { width: 60px; height: 84px; }
-  .card-name-text { font-size: 10px; }
-  .card-icon { font-size: 18px; }
-  .table-center { width: 140px; height: 140px; }
-  .table-center::before { width: 120px; height: 120px; }
-  .table-center::after { width: 100px; height: 100px; }
-  .table-logo { font-size: 24px; }
+@media (max-width: 1100px) {
+  .hero-panel { width: 170px; padding: 8px; }
+  .hero-panel.human-panel { width: 190px; }
+  .hero-avatar { width: 42px; height: 42px; font-size: 20px; }
+  .hero-name { font-size: 13px; }
+  .game-table { height: 72vh; min-height: 480px; }
 }
-@media (max-width: 600px) {
-  .hero-panel { width: 120px; padding: 5px; }
-  .hero-panel.human-panel { width: 135px; }
-  .hero-avatar { width: 30px; height: 30px; font-size: 14px; }
+@media (max-width: 800px) {
+  .game-table { height: 65vh; min-height: 420px; }
+  .hero-panel { width: 140px; padding: 6px; }
+  .hero-panel.human-panel { width: 160px; }
+  .hero-avatar { width: 34px; height: 34px; font-size: 16px; }
   .hero-name { font-size: 11px; }
   .hero-title { font-size: 8px; }
-  .card { width: 50px; height: 70px; }
+  .card { width: 56px; height: 80px; }
   .card-name-text { font-size: 9px; }
-  .card-icon { font-size: 15px; }
-  .card-suit-num { font-size: 9px; }
-  .table-center { width: 100px; height: 100px; }
-  .table-center::before { width: 85px; height: 85px; }
-  .table-center::after { width: 70px; height: 70px; }
-  .table-logo { font-size: 20px; }
+  .card-icon { font-size: 17px; }
+  .table-center { width: 140px; height: 140px; }
+  .table-center::before { width: 115px; height: 115px; }
+  .table-center::after { width: 95px; height: 95px; }
+  .table-logo { font-size: 22px; }
   .top-bar h1 { font-size: 16px; }
   .seat-badge { width: 22px; height: 22px; font-size: 10px; }
   .seat-badge.human { font-size: 11px; }
 }
-</style>
+@media (max-width: 550px) {
+  .hero-panel { width: 110px; padding: 5px; }
+  .hero-panel.human-panel { width: 125px; }
+  .hero-avatar { width: 28px; height: 28px; font-size: 13px; }
+  .hero-name { font-size: 10px; }
+  .hero-title { font-size: 7px; }
+  .card { width: 48px; height: 68px; }
+  .card-name-text { font-size: 8px; }
+  .card-icon { font-size: 14px; }
+  .card-suit-num { font-size: 8px; }
+  .table-center { width: 90px; height: 90px; }
+  .table-center::before { width: 75px; height: 75px; }
+  .table-center::after { width: 60px; height: 60px; }
+  .table-logo { font-size: 18px; }
+}
 </style>
 </head>
 <body>
@@ -613,20 +631,19 @@ class Game {
     }
   }
 
-  // 计算环形坐标：seat 0 = 底部 (6点钟)，顺时针递增
-  getCircularPos(seat, totalSeats, containerW, containerH, panelW, panelH) {
-    const cx = containerW / 2;
-    const cy = containerH / 2;
-    // 半径取容器50%（加大），留更多间距避免重叠
-    const rx = containerW * 0.50 - panelW / 2;
-    const ry = containerH * 0.47 - panelH / 2;
-    // 0号位在底部（6点钟 = 90度），顺时针 = 角度增大
-    const baseAngle = Math.PI / 2; // 90度 = 6点钟
-    const step = (2 * Math.PI) / totalSeats;
-    const angle = baseAngle + seat * step;
-    const left = cx + rx * Math.cos(angle) - panelW / 2;
-    const top = cy + ry * Math.sin(angle) - panelH / 2;
-    return { left: Math.max(5, left), top: Math.max(5, top) };
+  // 计算环形百分比坐标：AI 围绕完整圆形，底部留给人类
+  getCircularPos(seat, totalSeats) {
+    // seat: AI 座位号 (1 ~ totalSeats-1), totalSeats 含人类
+    const numInCircle = totalSeats - 1;
+    const baseAngle = -Math.PI / 2; // 从12点钟顺时针排
+    const step = (2 * Math.PI) / numInCircle;
+    const idx = seat - 1;
+    const angle = baseAngle + idx * step;
+    const rx = 40; const ry = 40; // 百分比半径，适配所有屏幕
+    return {
+      left: (50 + rx * Math.cos(angle)).toFixed(2) + '%',
+      top: (50 + ry * Math.sin(angle)).toFixed(2) + '%'
+    };
   }
 
   initDeck() {
@@ -2066,15 +2083,12 @@ class Game {
     </div>`;
 
     const totalSeats = this.players.length;
-    // 根据玩家人数动态调整牌桌尺寸，人数越多牌桌越大
-    const tableW = 1100 + Math.max(0, (totalSeats - 5)) * 180;
-    const tableH = 650 + Math.max(0, (totalSeats - 5)) * 100;
 
-    // AI 对手环形分布
+    // AI 对手环形分布（百分比定位，适配任何屏幕）
     const aiPlayers = this.players.filter(p => !p.isHuman);
     for (const p of aiPlayers) {
-      const pos = this.getCircularPos(p.seat, totalSeats, tableW, tableH, 185, 165);
-      html += `<div class="hero-panel-wrapper" style="position:absolute;left:${pos.left}px;top:${pos.top}px;">`;
+      const pos = this.getCircularPos(p.seat, totalSeats);
+      html += `<div class="hero-panel-wrapper" style="position:absolute;left:${pos.left};top:${pos.top};transform:translate(-50%,-50%);">`;
       html += this.renderHeroPanel(p, false, p.seat);
       // AI 手牌显示（卡背或可见状态）
       if (p.hand.length > 0) {
