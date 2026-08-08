@@ -293,9 +293,9 @@ Game.prototype.triggerNongminBonus = function (mate, deadMate) {
   }
   this.render();
   this.checkGameOver();
-  // 同心结算后恢复出牌回合：阵亡发生在攻击方（地主）的回合内，
-  // currentPlayerIdx 仍是该攻击方，需续上其出牌，否则回合永久挂起。
-  if (!this.gameOver) this._resumeGameAfterDying(this.players[this.currentPlayerIdx]);
+  // 注意：不在此处 resume——同心塞在 dealDamage → handleDying → killPlayer 链内，
+  // 上游的 aiPlayCards / humanRespondShan / processAOETargets 各自会通过递归/回调恢复回合。
+  // 若在此 resume，会与上游的递归产生双重 aiPlayCards，导致"连续摸牌"。
 };
 
 Game.prototype.humanNongminBonus = function (choice) {
