@@ -109,13 +109,16 @@ Game.prototype._recordBid = function (pid, value) {
   this.addLog(`${this.players[pid].hero.name} ${value === 0 ? '不叫' : '叫 ' + value + ' 分'}`, value > 0 ? 'important' : 'normal');
   if (value === 3) {
     bid.current = bid.order.length;
-    this.render();
     this._resolveBidding();
     return;
   }
   bid.current++;
-  this.render();
-  this._advanceBidding();
+  if (bid.current >= bid.order.length) {
+    this._resolveBidding();
+  } else {
+    this.render();
+    this._advanceBidding();
+  }
 };
 
 Game.prototype.humanBid = function (value) {
@@ -170,6 +173,7 @@ Game.prototype._resolveBidding = function () {
 // ==================== 布置战场 ====================
 
 Game.prototype._setupDouDizhu = function (landlordIdx) {
+  this.ddzLandlord = landlordIdx;
   this.players.forEach((p, i) => { p.role = (i === landlordIdx) ? 'dizhu' : 'nongmin'; });
 
   const landlord = this.players[landlordIdx];
@@ -315,7 +319,7 @@ Game.prototype.renderBidding = function () {
   const app = document.getElementById('app');
   const bid = this.ddzBid;
   const current = bid.order[bid.current];
-  const curPlayer = this.players[current];
+  const curPlayer = (current != null && this.players[current]) ? this.players[current] : null;
   const isHumanTurn = curPlayer && curPlayer.isHuman && !this.autoPlay && !bid.done;
 
   const heroCards = this.players.map(p => {

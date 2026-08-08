@@ -16,13 +16,29 @@
   </div>
 </div>
 
-<script src="heroes.js"></script>
-<script src="cards.js"></script>
-<script src="roles.js"></script>
-<script src="prng.js"></script>
-<script src="pvp.js"></script>
-<script src="game.js"></script>
-<script src="ai.js"></script>
-<script src="ddz.js"></script>
+<!-- 数据层 -->
+<script src="src/data/heroes.js"></script>
+<script src="src/data/cards.js"></script>
+<script src="src/data/roles.js"></script>
+<script src="src/data/prng.js"></script>
+<!-- PvP 同步（提供全局 pvpBroadcast 等） -->
+<script src="src/modes/pvp.js"></script>
+<!-- 核心 Game 类（必须最先） -->
+<script src="src/game/00-core-class.js"></script>
+<!-- 按职责拆分的 Game 原型方法 -->
+<script src="src/game/01-core.js"></script>
+<script src="src/game/02-turn.js"></script>
+<script src="src/game/03-cards.js"></script>
+<script src="src/game/04-skills.js"></script>
+<script src="src/game/05-combat.js"></script>
+<script src="src/game/06-phase.js"></script>
+<script src="src/game/07-pvp-remote.js"></script>
+<script src="src/game/08-ui.js"></script>
+<!-- AI 行为 -->
+<script src="src/ai/ai.js"></script>
+<!-- 斗地主模式（提供 startDouDizhuBidding 等全局函数） -->
+<script src="src/modes/ddz.js"></script>
+<!-- 顶层函数与入口（最后加载，自动调用 showHeroSelect） -->
+<script src="src/game/09-functions.js"></script>
 </body>
 </html>
