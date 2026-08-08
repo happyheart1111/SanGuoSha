@@ -147,7 +147,7 @@
   Game.prototype._doRender = function() {
     const app = document.getElementById('app');
     // 叫分阶段：单独渲染叫分界面
-    if (this.phase === 'bidding') { app.innerHTML = this.renderBidding(); return; }
+    if (this.phase === 'bidding') { this.renderBidding(); return; }
     const player = this.players[this.currentPlayerIdx];
     const humanPlayer = this.players.find(p => p.isHuman);
     const isHumanTurn = player && player.isHuman;
