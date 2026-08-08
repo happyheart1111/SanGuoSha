@@ -1,4 +1,6 @@
-// Auto-split from game.js — 05-combat
+// ==================== 战斗与死亡模块 ====================
+// 伤害结算、濒死救助（桃/急救）、阵亡处理、奖惩机制（反贼奖励/主公杀忠惩罚/农民同心补偿）、
+// 游戏结束判定等生死相关逻辑。
   Game.prototype.handleDying = function(player, source) {
     this.addLog(`${player.hero.name}处于濒死状态，需要打出【桃】`, 'damage');
 

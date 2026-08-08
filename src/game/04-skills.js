@@ -1,4 +1,6 @@
-// Auto-split from game.js — 04-skills
+// ==================== 武将技能模块 ====================
+// 所有武将技能的触发、交互与结算：奸雄、天妒、行殇、放逐、苦肉、结姻、武圣、咆哮、
+// 仁德、制衡、突袭、雷击、鬼道、恃勇、无双、急救、火计、八阵、克己、英姿、奇袭等。
   Game.prototype.triggerJianxiong = function(target, card) {
     if (target.isHuman && !this.autoPlay) {
       this.waitingForTarget = { type: 'jianxiong', target, card };

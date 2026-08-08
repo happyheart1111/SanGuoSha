@@ -1,4 +1,6 @@
-// Auto-split from game.js — 03-cards
+// ==================== 卡牌结算模块 ====================
+// 锦囊牌使用与效果结算：决斗、过河拆桥、顺手牵羊、南蛮入侵、万箭齐发、火攻、无懈可击、
+// 铁索连环等卡牌的完整交互响应流程。
   Game.prototype.resolveJuedou = function(source, target) {
     this.addLog(`${source.hero.name}向${target.hero.name}发起决斗！`, 'important');
     this.juedouRound(source, target);

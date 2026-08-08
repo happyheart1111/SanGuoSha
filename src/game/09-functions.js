@@ -1,4 +1,6 @@
-// Auto-split from game.js — top-level functions/entry
+// ==================== 入口与顶层函数模块 ====================
+// 游戏模式选择界面、武将选将 UI、PvP 大厅入口、武将图鉴展示、游戏启动入口等
+// 顶层全局函数，负责用户交互入口与页面路由。
 let game;
 
 function startGame(heroId) {

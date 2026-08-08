@@ -1,4 +1,5 @@
-// Auto-split from game.js — 02-turn
+// ==================== 回合控制模块 ====================
+// 回合流转管理：新回合开始/结束、托管自动出牌、AOE 结算推进、濒死救人后恢复游戏流程。
   Game.prototype.toggleAutoPlay = function() {
     this.autoPlay = !this.autoPlay;
     if (this.autoPlay) {

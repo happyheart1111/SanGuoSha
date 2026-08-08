@@ -1,4 +1,6 @@
-// Auto-split from game.js — 08-ui
+// ==================== 工具与渲染模块 ====================
+// Game 类的公开辅助方法：摸牌、距离计算、决斗回合、伤害处理、牌堆管理、弃牌操作、
+// 手牌数获取等供前端界面调用的通用工具函数。
   Game.prototype.drawCard = function(player, count = 1) {
     for (let i = 0; i < count; i++) {
       if (this.deck.length === 0) {

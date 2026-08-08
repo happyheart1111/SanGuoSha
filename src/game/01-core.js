@@ -1,4 +1,6 @@
-// Auto-split from game.js — 01-core
+// ==================== 核心初始化模块 ====================
+// Game 类的构造初始化、PvP 初始化、游戏启动入口（init），负责玩家创建、身份分配、
+// 牌堆生成、洗牌发牌等游戏开局准备流程。
   Game.prototype.constructor = function() {
     this.players = [];
     this.deck = [];

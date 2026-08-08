@@ -1,4 +1,5 @@
-// Auto-split from game.js — 06-phase
+// ==================== 阶段推进模块 ====================
+// 出牌阶段结束后的弃牌阶段处理、吕蒙克己跳过弃牌、回合结束清理与状态重置等阶段流转逻辑。
   Game.prototype.goToDiscardPhase = function(player) {
     // PvP 客机：AI回合不自行推进
     if (this._isPvP && pvpManager && !pvpManager.isHost && !player.isHuman) {

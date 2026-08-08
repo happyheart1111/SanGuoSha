@@ -1,4 +1,6 @@
-// Auto-split from game.js — 07-pvp-remote
+// ==================== PvP 远程同步模块 ====================
+// 接收并执行远程玩家操作在本地 Game 实例的回放：出牌、杀响应、决斗响应、技能使用、
+// 选将确认、过河拆桥选择、五谷丰登选牌、濒死自救等远程动作的本地执行。
   Game.prototype._pvpRemotePlayCard = function(payload) {
     const { playerId, cardIdx, targetPlayerIdx, effectiveType } = payload;
     const player = this.players[playerId];
