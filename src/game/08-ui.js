@@ -123,6 +123,19 @@
     }
   }
 
+  // 装备牌名简写映射
+  const EQUIP_SHORT = {
+    '诸葛连弩': '连弩', '青龙偃月刀': '青龙刀', '丈八蛇矛': '丈八', '贯石斧': '贯石',
+    '青釭剑': '青釭', '方天画戟': '方天', '朱雀羽扇': '朱雀', '麒麟弓': '麒麟',
+    '寒冰剑': '寒冰', '古锭刀': '古锭',
+    '八卦阵': '八卦', '仁王盾': '仁王',
+    '的卢': '的卢', '绝影': '绝影', '爪黄飞电': '爪黄',
+    '赤兔': '赤兔', '大宛': '大宛', '紫骍': '紫骍',
+  };
+  Game.prototype.getEquipShortName = function(name) {
+    return EQUIP_SHORT[name] || name;
+  };
+
   Game.prototype._renderPvPBadge = function() {
     if (!this._isPvP) return '';
     const connected = pvpManager && pvpManager.connected;
@@ -204,21 +217,9 @@
       // 英雄面板
       html += this.renderHeroPanel(p, isHuman, p.seat);
 
-      // AI 手牌（卡背或可见状态）
+      // AI/敌人手牌（数字显示）
       if (!isHuman && p.hand.length > 0) {
-        html += '<div class="player-hand-row">';
-        for (let i = 0; i < p.hand.length; i++) {
-          const card = p.hand[i];
-          const isRevealed = this.waitingForTarget && !this.autoPlay &&
-            ((this.waitingForTarget.type === 'guohe_discard' || this.waitingForTarget.type === 'shunshou_steal')
-            && this.waitingForTarget.target.id === p.id);
-          if (isRevealed) {
-            html += `<div class="mini-card ${this.getCardStyle(card)}" style="font-size:7px;">${card.name}</div>`;
-          } else {
-            html += '<div class="mini-card face-down"></div>';
-          }
-        }
-        html += '</div>';
+        html += `<div class="player-hand-row" style="text-align:center;color:#c0a060;font-size:11px;">手牌: ${p.hand.length}张</div>`;
       }
 
       // 人类手牌与装备已移至桌面底部托盘（seat-table 之后渲染，不参与环形定位）
@@ -317,7 +318,7 @@
       ];
       for (const { slot, label, cls } of equipSlots) {
         const eq = humanPlayer.equipment[slot];
-        const eqName = eq ? eq.name : '(空)';
+        const eqName = eq ? this.getEquipShortName(eq.name) : '(空)';
         html += '<div class="equip-zone"><div class="equip-zone-label">' + label + '</div>'
           + '<div class="equip-slot ' + (eq ? 'occupied ' + cls : '') + '">' + eqName + '</div></div>';
       }
@@ -609,7 +610,7 @@
     const canClickEquip = guoheTarget || shunshouTarget;
     for (const { slot, label, cls } of equipSlots) {
       const eq = player.equipment[slot];
-      const eqName = eq ? eq.name : '(空)';
+      const eqName = eq ? this.getEquipShortName(eq.name) : '(空)';
       let clickAttr = '';
       if (canClickEquip && eq) {
         if (guoheTarget) clickAttr = ` onclick="event.stopPropagation(); game.humanGuoheDiscardEquip('${slot}')" style="cursor:pointer;border:2px dashed #f0d060;" title="点击弃置此装备"`;

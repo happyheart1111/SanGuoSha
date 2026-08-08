@@ -51,6 +51,14 @@
       source.equipment = { weapon: null, armor: null, plusHorse: null, minusHorse: null };
     }
 
+    // 阵亡角色手牌和装备进入弃牌堆
+    const deadCards = [...player.hand, ...Object.values(player.equipment).filter(Boolean)];
+    for (const c of deadCards) {
+      this.discardPile.push(c);
+    }
+    player.hand = [];
+    player.equipment = { weapon: null, armor: null, plusHorse: null, minusHorse: null };
+
     const caopi = this.players.find(p => p.hero.id === 'caopi' && p.alive);
     if (caopi) this.triggerXingshang(caopi);
   }
