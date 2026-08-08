@@ -32,36 +32,36 @@ function showGameModeSelect() {
     <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;gap:30px;padding:20px;">
       <h1 style="font-size:40px;color:#f0d060;text-shadow:0 0 20px rgba(240,208,96,0.5);letter-spacing:8px;">🏯 三国杀</h1>
       <p style="color:#c0a060;font-size:16px;">选择游戏模式</p>
-      <div style="display:flex;gap:20px;flex-wrap:wrap;justify-content:center;">
-        <div onclick="startHeroPick('ddz')" style="
+      <div class="mode-select-grid" style="display:flex;gap:20px;flex-wrap:wrap;justify-content:center;">
+        <div class="mode-select-card" onclick="startHeroPick('ddz')" style="
           width:200px;padding:30px;background:linear-gradient(180deg,rgba(30,15,5,0.9),rgba(50,25,10,0.95));
           border:2px solid #8b6914;border-radius:16px;cursor:pointer;text-align:center;
           transition:all 0.3s;
         " onmouseover="this.style.transform='scale(1.05)';this.style.borderColor='#f0d060';this.style.boxShadow='0 0 25px rgba(240,208,96,0.3)'"
            onmouseout="this.style.transform='scale(1)';this.style.borderColor='#8b6914';this.style.boxShadow='none'">
           <div style="font-size:48px;">🃏</div>
-          <div style="font-size:20px;font-weight:bold;margin:12px 0;color:#f0d060;">三人斗地主</div>
-          <div style="font-size:12px;color:#a08050;">1地主 vs 2农民 · 叫分定身份</div>
+          <div class="mode-title" style="font-size:20px;font-weight:bold;margin:12px 0;color:#f0d060;">三人斗地主</div>
+          <div class="mode-desc" style="font-size:12px;color:#a08050;">1地主 vs 2农民 · 叫分定身份</div>
         </div>
-        <div onclick="startHeroPick(5)" style="
+        <div class="mode-select-card" onclick="startHeroPick(5)" style="
           width:200px;padding:30px;background:linear-gradient(180deg,rgba(30,15,5,0.9),rgba(50,25,10,0.95));
           border:2px solid #8b6914;border-radius:16px;cursor:pointer;text-align:center;
           transition:all 0.3s;
         " onmouseover="this.style.transform='scale(1.05)';this.style.borderColor='#f0d060';this.style.boxShadow='0 0 25px rgba(240,208,96,0.3)'"
            onmouseout="this.style.transform='scale(1)';this.style.borderColor='#8b6914';this.style.boxShadow='none'">
           <div style="font-size:48px;">👑</div>
-          <div style="font-size:20px;font-weight:bold;margin:12px 0;color:#f0d060;">五人身份局</div>
-          <div style="font-size:12px;color:#a08050;">1主1忠2反1内 · 身份隐藏</div>
+          <div class="mode-title" style="font-size:20px;font-weight:bold;margin:12px 0;color:#f0d060;">五人身份局</div>
+          <div class="mode-desc" style="font-size:12px;color:#a08050;">1主1忠2反1内 · 身份隐藏</div>
         </div>
-        <div onclick="startHeroPick(8)" style="
+        <div class="mode-select-card" onclick="startHeroPick(8)" style="
           width:200px;padding:30px;background:linear-gradient(180deg,rgba(30,15,5,0.9),rgba(50,25,10,0.95));
           border:2px solid #8b6914;border-radius:16px;cursor:pointer;text-align:center;
           transition:all 0.3s;
         " onmouseover="this.style.transform='scale(1.05)';this.style.borderColor='#f0d060';this.style.boxShadow='0 0 25px rgba(240,208,96,0.3)'"
            onmouseout="this.style.transform='scale(1)';this.style.borderColor='#8b6914';this.style.boxShadow='none'">
           <div style="font-size:48px;">🏰</div>
-          <div style="font-size:20px;font-weight:bold;margin:12px 0;color:#f0d060;">八人身份局</div>
-          <div style="font-size:12px;color:#a08050;">1主2忠4反1内 · 身份隐藏</div>
+          <div class="mode-title" style="font-size:20px;font-weight:bold;margin:12px 0;color:#f0d060;">八人身份局</div>
+          <div class="mode-desc" style="font-size:12px;color:#a08050;">1主2忠4反1内 · 身份隐藏</div>
         </div>
       </div>
       <div style="margin-top:10px;text-align:center;">
@@ -120,7 +120,7 @@ function showHeroGallery() {
     
     html += `<div style="margin-bottom:25px;">`;
     html += `<h2 style="color:${fc.title};font-size:20px;margin-bottom:12px;border-left:3px solid ${fc.border};padding-left:10px;">${f}</h2>`;
-    html += `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;">`;
+    html += `<div class="gallery-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;">`;
     
     for (const hero of list) {
       const avatarColors = {
@@ -159,7 +159,7 @@ function showHeroGallery() {
       };
       const bg = avatarColors[hero.id] || avatarColors[hero.avatarClass] || 'linear-gradient(135deg, #2a2a3a, #4a4a6a)';
       
-      html += `<div style="background:${fc.bg};border:1px solid ${fc.border};border-radius:12px;padding:16px;cursor:pointer;transition:all 0.25s;"
+      html += `<div class="gallery-hero-card" style="background:${fc.bg};border:1px solid ${fc.border};border-radius:12px;padding:16px;cursor:pointer;transition:all 0.25s;"
         onmouseover="this.style.transform='translateY(-3px)';this.style.boxShadow='0 6px 20px rgba(0,0,0,0.4)'"
         onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='none'"
         onclick="showHeroDetail('${hero.id}')">
@@ -198,8 +198,8 @@ function showHeroDetail(heroId) {
   };
   
   const app = document.getElementById('app');
-  let html = `<div style="max-width:600px;margin:40px auto;padding:20px;">`;
-  html += `<div style="background:linear-gradient(180deg,rgba(20,16,10,0.95),rgba(40,30,20,0.95));border:2px solid #8b6914;border-radius:16px;padding:30px;text-align:center;">`;
+  let html = `<div class="hero-detail-wrap" style="max-width:600px;margin:40px auto;padding:20px;">`;
+  html += `<div class="hero-detail-card" style="background:linear-gradient(180deg,rgba(20,16,10,0.95),rgba(40,30,20,0.95));border:2px solid #8b6914;border-radius:16px;padding:30px;text-align:center;">`;
   
   // 头像
   html += `<div style="width:80px;height:80px;border-radius:50%;background:linear-gradient(135deg,#3a2a1a,#605030);display:inline-flex;align-items:center;justify-content:center;font-size:36px;font-weight:bold;color:#f0d060;margin-bottom:15px;box-shadow:0 4px 16px rgba(0,0,0,0.4);border:2px solid #8b6914;">${hero.name[0]}</div>`;
@@ -916,7 +916,7 @@ function showHumanHeroPick(heroChoices, gameMode, lordHero, lordIdx) {
   heroChoices.forEach(hId => {
     const h = HEROES[hId];
     cardsHtml += `
-    <div onclick="confirmHeroPick('${h.id}')" style="
+    <div onclick="confirmHeroPick('${h.id}')" class="hero-pick-card" style="
       width:180px;padding:20px;background:linear-gradient(180deg,rgba(30,15,5,0.95),rgba(50,25,10,0.95));
       border:2px solid #8b6914;border-radius:14px;cursor:pointer;text-align:center;
       transition:all 0.3s;
@@ -962,7 +962,7 @@ function showHumanHeroPick(heroChoices, gameMode, lordHero, lordIdx) {
       <h1 style="font-size:30px;color:#f0d060;text-shadow:0 0 20px rgba(240,208,96,0.5);">🎯 选择武将</h1>
       <p style="color:#c0a060;font-size:15px;">${getGameModeName(gameMode) || gameMode + '人局'} — 从${pickCount}名武将中选择一位</p>
       ${lordInfoHtml}
-      <div style="display:flex;gap:25px;flex-wrap:wrap;justify-content:center;">
+      <div class="hero-pick-grid" style="display:flex;gap:25px;flex-wrap:wrap;justify-content:center;">
         ${cardsHtml}
       </div>
       <p style="color:#806040;font-size:12px;">点击武将卡片确认选择</p>

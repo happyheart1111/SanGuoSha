@@ -328,7 +328,7 @@ Game.prototype.renderBidding = function () {
   const heroCards = this.players.map(p => {
     const active = (p.id === current && !bid.done) ? 'border-color:#f0d060;box-shadow:0 0 25px rgba(240,208,96,0.4);transform:scale(1.05);' : '';
     const bidTxt = bid.picks[p.id] !== undefined ? (bid.picks[p.id] === 0 ? '不叫' : bid.picks[p.id] + '分') : '—';
-    return `<div style="width:160px;padding:18px;background:linear-gradient(180deg,rgba(30,15,5,0.95),rgba(50,25,10,0.95));border:2px solid #8b6914;border-radius:14px;text-align:center;${active}">
+    return `<div class="hero-card" style="width:160px;padding:18px;background:linear-gradient(180deg,rgba(30,15,5,0.95),rgba(50,25,10,0.95));border:2px solid #8b6914;border-radius:14px;text-align:center;${active}">
       <div class="hero-avatar ${p.hero.avatarClass}" style="margin:0 auto 8px;width:56px;height:56px;font-size:24px;">${p.hero.name[0]}</div>
       <div style="font-size:17px;font-weight:bold;color:#f0d060;">${p.hero.name}</div>
       <div style="font-size:11px;color:#a08050;margin:3px 0;">${p.hero.title}</div>
@@ -357,7 +357,7 @@ Game.prototype.renderBidding = function () {
   }
 
   app.innerHTML = `
-    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;gap:24px;padding:20px;">
+    <div class="ddz-bidding-wrap" style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;gap:24px;padding:20px;">
       <h1 style="font-size:32px;color:#f0d060;text-shadow:0 0 20px rgba(240,208,96,0.5);">🃏 三人斗地主 · 叫分</h1>
       <p style="color:#c0a060;font-size:14px;">1 名地主对抗 2 名农民，叫分最高者成为地主（全不叫则首位叫分者当地主）</p>
       <div style="display:flex;gap:20px;flex-wrap:wrap;justify-content:center;">${heroCards}</div>
