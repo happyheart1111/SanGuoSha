@@ -16,3 +16,10 @@
 ## ddz 玩法（欢乐斗地主）
 - 1 地主 vs 2 农民，叫分定地主；地主 +1 体力上限 +【飞扬】【跋扈】，农民队友阵亡【同心】。差异层在 ddz.js，复用全部卡牌结算。
 - 禁将 caopi。
+
+## VFX 特效系统
+- `src/game/vfx.js` 提供独立 VFX 层（#vfx-layer，position:fixed, z-index:500, pointer-events:none），不受 _doRender 的 innerHTML 重建影响
+- 核心API：VFX.damageEffect / healEffect / skillActivate / turnBanner / deathEffect / cardFly / particleBurst / screenShake
+- 所有 VFX 调用必须用 `typeof VFX !== 'undefined'` 守卫
+- VFX 位置定位用 `getBoundingClientRect()` 查询 `.player-slot` 内的 `.hero-name` 匹配 `player.hero.name`
+- 触发点：dealDamage(08-ui) / resolveTao(02-turn) / killPlayer(05-combat) / startCurrentTurn(02-turn) / useCardOnTarget(02-turn) / doLeiji+各skill(04-skills)

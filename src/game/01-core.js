@@ -63,6 +63,8 @@
   }
 
   Game.prototype.initPvP = function(gameMode, totalPlayers, heroPool, hostHeroId, guestHeroId) {
+    // VFX 引擎初始化
+    if (typeof VFX !== 'undefined') { VFX.init(); VFX.clear(); }
     this.gameMode = gameMode;
     this._isPvP = true;
     
@@ -213,6 +215,8 @@
     if (!Array.isArray(heroIds)) {
       return this.initOld(gameMode);
     }
+    // VFX 引擎初始化
+    if (typeof VFX !== 'undefined') { VFX.init(); VFX.clear(); }
     this.gameMode = gameMode;
     this.humanPlayerId = heroIds[0]; // 人类玩家总是第0位
     this.heroIdList = [...heroIds];
@@ -294,6 +298,8 @@
   }
 
   Game.prototype.initOld = function(humanHeroId) {
+    // VFX 引擎初始化
+    if (typeof VFX !== 'undefined') { VFX.init(); VFX.clear(); }
     this.gameMode = 1;
     this.humanPlayerId = humanHeroId;
     this.heroIdList = [humanHeroId];

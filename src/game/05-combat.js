@@ -30,6 +30,8 @@
     const line = this.killCount <= KILL_LINES.length ? KILL_LINES[this.killCount - 1] : `第${this.killCount}杀！`;
     const killerName = source ? source.hero.name : '天';
     this.addLog(`${line}  ${killerName} 斩杀了 ${player.hero.name}`, 'death');
+    // VFX 死亡消散特效
+    if (typeof VFX !== 'undefined') VFX.deathEffect(player);
     if (player.role && !this.rolesRevealed[player.id]) {
       this.rolesRevealed[player.id] = true;
       this.addLog(`${player.hero.name}的身份是：${getRoleDisplayName(player.role)}`, 'important');
@@ -78,6 +80,11 @@
       this.discardCard(player, withCard);
       player.hp = 1;
       this.addLog(`${player.hero.name}${isJijiu ? '发动【急救】将红色牌当【桃】' : '使用【桃】'}自救，回复至1点体力`, isJijiu ? 'skill' : 'heal');
+      // VFX 治疗特效
+      if (typeof VFX !== 'undefined') {
+        VFX.healEffect(player, 1);
+        if (isJijiu) VFX.skillActivate(player);
+      }
       this._resumeSourcePlay(source || this.players[this.currentPlayerIdx]);
     } else {
       this.killPlayer(player, source);

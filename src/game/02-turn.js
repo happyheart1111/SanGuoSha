@@ -105,6 +105,8 @@
         const t = wt.targets[Math.floor(Math.random() * wt.targets.length)];
         t.hp++;
         this.addLog(`${wt.player.hero.name}发动【青囊】令${t.hero.name}回复1点体力`, 'skill');
+        // VFX 治疗特效
+        if (typeof VFX !== 'undefined') { VFX.healEffect(t, 1); VFX.skillActivate(wt.player); }
         this._resumeSourcePlay(wt.player);
         break;
       }
@@ -146,6 +148,8 @@
     target.hp++;
     this.haoshiUsedThisTurn = true;
     this.addLog(`${player.hero.name}发动【好施】，弃【${card.name}】令${target.hero.name}回复1点体力`, 'skill');
+    // VFX 治疗特效
+    if (typeof VFX !== 'undefined') { VFX.healEffect(target, 1); VFX.skillActivate(player); }
   }
 
   Game.prototype.startCurrentTurn = function() {
@@ -192,6 +196,9 @@
     }
     
     this.addLog(`—— ${player.hero.name} 的回合开始 ——`, 'important');
+
+    // VFX 回合过渡横幅
+    if (typeof VFX !== 'undefined') VFX.turnBanner(player.hero.name, player.isHuman);
 
     // 判定阶段 — 处理判定区的延时锦囊
     this.resolveJudgePhase(player);
@@ -492,6 +499,12 @@
     const desc = isWushengSha ? `将${card.suit}【${card.name}】当【杀】使用` : `使用了【${card.name}】`;
     this.addLog(`${player.hero.name}${desc}${target ? '，目标是' + target.hero.name : ''}`, isWushengSha ? 'skill' : '');
 
+    // VFX 卡牌飞行 & 技能激活
+    if (typeof VFX !== 'undefined') {
+      if (target) VFX.cardFly(player, target);
+      if (isWushengSha) VFX.skillActivate(player);
+    }
+
     if (effectiveType === 'sha') {
       if (player.hero.id !== 'zhangfei' && this.extraShaChances <= 0) this.shaUsedCount++;
       if (this.extraShaChances > 0) this.extraShaChances--;
@@ -642,6 +655,8 @@
     if (player.hp < player.hero.maxHp) {
       player.hp++;
       this.addLog(`${player.hero.name}回复了1点体力 (${player.hp}/${player.hero.maxHp})`, 'heal');
+      // VFX 治疗特效
+      if (typeof VFX !== 'undefined') VFX.healEffect(player, 1);
     } else {
       this.addLog(`${player.hero.name}体力已满，【桃】无法生效`);
     }
@@ -650,6 +665,8 @@
   Game.prototype.resolveJiu = function(player) {
     this.jiuDamageBoost = true;
     this.addLog(`${player.hero.name}使用了【酒】，本回合下一张【杀】伤害+1`, 'skill');
+    // VFX 技能激活
+    if (typeof VFX !== 'undefined') VFX.skillActivate(player);
     if (player.hp < player.hero.maxHp) this.addLog('（【酒】也可在回合外濒死时当【桃】使用）');
     this.render();
   }

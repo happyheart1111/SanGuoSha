@@ -48,6 +48,10 @@
       if (!target.alive) return;
       target.hp--;
       this.addLog(`${target.hero.name}受到1点伤害 (剩余HP: ${target.hp}/${target.hero.maxHp})`, 'damage');
+      // VFX 伤害特效
+      if (typeof VFX !== 'undefined') {
+        VFX.damageEffect(target, 1);
+      }
 
       // 曹操奸雄
       if (target.alive && target.hero.id === 'caocao' && card && this.pendingDamageCards[target.id]) {

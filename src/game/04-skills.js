@@ -8,6 +8,8 @@
       card.ownerId = target.id;
       target.hand.push(card);
       this.addLog(`${target.hero.name}发动【奸雄】，获得了【${card.name}】`, 'skill');
+      // VFX 技能激活
+      if (typeof VFX !== 'undefined') VFX.skillActivate(target);
     }
   }
 
@@ -33,6 +35,8 @@
     } else {
       this.drawCard(target, 1);
       this.addLog(`${target.hero.name}发动【天妒】，摸了一张牌`, 'skill');
+      // VFX 技能激活
+      if (typeof VFX !== 'undefined') VFX.skillActivate(target);
     }
   }
 
@@ -115,10 +119,17 @@
     const judgeCard = this.deck.pop();
     this.addLog(`${target.hero.name}发动【雷击】，判定牌为${judgeCard.suit}【${judgeCard.name}】`, 'skill');
     this.discardPile.push(judgeCard);
+    // VFX 技能激活
+    if (typeof VFX !== 'undefined') VFX.skillActivate(target);
     if (judgeCard.suit === '♠' && source.alive) {
       this.addLog(`判定结果为♠，${source.hero.name}受到1点雷电伤害！`, 'damage');
       source.hp--;
       this.addLog(`${source.hero.name}受到1点雷电伤害 (剩余HP: ${source.hp}/${source.hero.maxHp})`, 'damage');
+      // VFX 雷电伤害特效
+      if (typeof VFX !== 'undefined') {
+        VFX.damageEffect(source, 1);
+        VFX.spawnFloatText(VFX.getTargetCenter(source).x, VFX.getTargetCenter(source).y - 40, '⚡', 'skill');
+      }
       if (source.hp <= 0) this.handleDying(source);
       this.checkGameOver();
     } else {
@@ -181,6 +192,8 @@
         this.drawCard(player, count);
         this.zhihengUsedThisTurn = true;
         this.addLog(`${player.hero.name}发动【制衡】，弃置${count}张牌并摸了${count}张牌`, 'skill');
+        // VFX 技能激活
+        if (typeof VFX !== 'undefined') VFX.skillActivate(player);
         this.render();
         break;
       }
@@ -189,6 +202,8 @@
         player.hp--;
         this.drawCard(player, 2);
         this.addLog(`${player.hero.name}发动【苦肉】，失去1点体力并摸2张牌 (HP: ${player.hp}/${player.hero.maxHp})`, 'skill');
+        // VFX 技能激活 + 伤害特效
+        if (typeof VFX !== 'undefined') { VFX.skillActivate(player); VFX.damageEffect(player, 1); }
         this.render();
         break;
       }
@@ -254,9 +269,13 @@
       target.hand.push(c);
     }
     this.addLog(`${player.hero.name}发动【仁德】，将${count}张手牌交给${target.hero.name}`, 'skill');
+    // VFX 技能激活
+    if (typeof VFX !== 'undefined') VFX.skillActivate(player);
     if (count >= 2 && player.hp < player.hero.maxHp) {
       player.hp++;
       this.addLog(`${player.hero.name}因【仁德】给出2张以上牌，回复1点体力`, 'heal');
+      // VFX 治疗特效
+      if (typeof VFX !== 'undefined') VFX.healEffect(player, 1);
     }
     this.render();
   }
@@ -271,6 +290,8 @@
     target.hp++;
     this.qingnangUsedThisTurn = true;
     this.addLog(`${player.hero.name}发动【青囊】，弃置【${discardCard.name}】令${target.hero.name}回复1点体力`, 'skill');
+    // VFX 治疗特效
+    if (typeof VFX !== 'undefined') { VFX.healEffect(target, 1); VFX.skillActivate(player); }
     this.render();
   }
 
@@ -284,6 +305,8 @@
     target.hp++;
     this.haoshiUsedThisTurn = true;
     this.addLog(`${player.hero.name}发动【好施】，弃置【${discardCard.name}】令${target.hero.name}回复1点体力`, 'skill');
+    // VFX 治疗特效
+    if (typeof VFX !== 'undefined') { VFX.healEffect(target, 1); VFX.skillActivate(player); }
     this.render();
   }
 
@@ -393,6 +416,10 @@
         if (target.hp < target.hero.maxHp) target.hp++;
         this.jieyinUsedThisTurn = true;
         this.addLog(`${player.hero.name}发动【结姻】，与${target.hero.name}各回复1点体力`, 'skill');
+        // VFX 治疗特效
+        if (typeof VFX !== 'undefined') {
+          VFX.healEffect(player, 1); VFX.healEffect(target, 1); VFX.skillActivate(player);
+        }
         this.render();
       });
   }
