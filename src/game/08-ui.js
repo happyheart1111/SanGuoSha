@@ -286,7 +286,8 @@
           }
           else if (wt.type === 'discard_phase' || wt.type === 'jieyin_discard' || wt.type === 'yeyan_discard'
             || wt.type === 'fangzhu_discard' || wt.type === 'guohe_discard' || wt.type === 'shunshou_steal') {
-            clickable = true;
+            // 盲选模式下出牌者是玩家自己，不应点击自己的手牌
+            clickable = !wt.blindPick;
           }
           else if (wt.type) clickable = false;
         }
@@ -426,6 +427,16 @@
         html += `<span style="color:#60e080;margin-right:10px;">队友阵亡！【同心】选择：</span>`;
         html += '<button class="btn skill-btn" onclick="game.humanNongminBonus(\'draw\')">摸2张牌</button>';
         html += '<button class="btn skill-btn" onclick="game.humanNongminBonus(\'heal\')">回复1点体力</button>';
+      }
+      // 过河拆桥/顺手牵羊盲选手牌（出牌者看不见牌面，仅按位置选）
+      if ((wt.type === 'guohe_discard' || wt.type === 'shunshou_steal') && wt.blindPick) {
+        const verb = wt.type === 'guohe_discard' ? '弃置' : '顺走';
+        html += `<span style="color:#f0d060;margin-right:10px;">选择要${verb}${wt.target.hero.name}的手牌（点击装备/判定区可直选）：</span>`;
+        const handChoices = wt.choices.filter(c => c.type === 'hand');
+        for (let i = 0; i < handChoices.length; i++) {
+          html += `<button class="btn" onclick="game.humanBlindPickHand('${wt.type}', ${i})" style="border:1px dashed #666;">手牌${i + 1}</button>`;
+        }
+        html += '<button class="btn" onclick="game.waitingForTarget = null; game.render()">取消</button>';
       }
       if (wt.type === 'discard_phase') {
         html += `<span style="color:#ff6060;margin-right:10px;">已选 ${wt.selected.length}/${wt.needDiscard} 张</span>`;
@@ -685,8 +696,14 @@
       if (wt.type === 'huogong_show') { this.humanShowCardForHuogong(idx); return; }
       if (wt.type === 'huogong_discard') { this.humanDiscardForHuogong(idx); return; }
       if (wt.type === 'juedou_defend_second' && (card.type === 'sha' || (humanPlayer.hero.id === 'guanyu' && isRedSuit(card.suit)))) { this.humanRespondJuedouSecond(card); return; }
-      if (wt.type === 'guohe_discard') { this.humanGuoheDiscard({type: 'hand', idx, card: card}); return; }
-      if (wt.type === 'shunshou_steal') { this.humanShunshouSteal({type: 'hand', idx, card: card}); return; }
+      if (wt.type === 'guohe_discard') {
+        if (wt.blindPick) return;
+        this.humanGuoheDiscard({type: 'hand', idx, card: card}); return;
+      }
+      if (wt.type === 'shunshou_steal') {
+        if (wt.blindPick) return;
+        this.humanShunshouSteal({type: 'hand', idx, card: card}); return;
+      }
       if (wt.type === 'discard_phase') { this.humanSelectDiscard(idx); return; }
       if (wt.type === 'jieyin_discard') { this.humanSelectJieyinDiscard(idx); return; }
       if (wt.type === 'yeyan_discard') { this.humanSelectYeyanDiscard(idx); return; }

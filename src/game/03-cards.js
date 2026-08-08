@@ -78,8 +78,17 @@
       return;
     }
 
+    // 目标是人类且非托管：让目标自己选
     if (target.isHuman && !this.autoPlay) {
       this.waitingForTarget = { type: 'guohe_discard', target, source: this.players[this.currentPlayerIdx], choices };
+      this.render();
+      return;
+    }
+
+    // 出牌者是人类且非托管（目标为AI或托管人类）：让出牌者盲选
+    const sourcePlayer = this.players[this.currentPlayerIdx];
+    if (sourcePlayer && sourcePlayer.isHuman && !this.autoPlay) {
+      this.waitingForTarget = { type: 'guohe_discard', target, source: sourcePlayer, choices, blindPick: true };
       this.render();
       return;
     }
@@ -288,8 +297,16 @@
       return;
     }
 
+    // 目标是人类且非托管：让目标自己选
     if (target.isHuman && !this.autoPlay) {
       this.waitingForTarget = { type: 'shunshou_steal', target, source, choices };
+      this.render();
+      return;
+    }
+
+    // 出牌者是人类且非托管（目标为AI或托管人类）：让出牌者盲选
+    if (source.isHuman && !this.autoPlay) {
+      this.waitingForTarget = { type: 'shunshou_steal', target, source, choices, blindPick: true };
       this.render();
       return;
     }
@@ -353,6 +370,19 @@
     const card = target.judgeArea[idx];
     if (!card) return;
     this.humanShunshouSteal({ type: 'judge', idx, card });
+  }
+
+  // 盲选手牌（过河拆桥/顺手牵羊时，出牌者看不见牌面，仅按位置选择）
+  Game.prototype.humanBlindPickHand = function(type, choiceIdx) {
+    if (!this.waitingForTarget || this.waitingForTarget.type !== type) return;
+    const filtered = this.waitingForTarget.choices.filter(c => c.type === 'hand');
+    if (choiceIdx < 0 || choiceIdx >= filtered.length) return;
+    const pick = filtered[choiceIdx];
+    if (type === 'guohe_discard') {
+      this.humanGuoheDiscard(pick);
+    } else if (type === 'shunshou_steal') {
+      this.humanShunshouSteal(pick);
+    }
   }
 
   Game.prototype.resolveWuzhong = function(player) {
