@@ -186,22 +186,27 @@ class Game {
   // ========== 从序列化数据重建卡牌对象 ==========
   _reconstructCard(data) {
     if (!data) return null;
-    // 尝试从卡牌库匹配
-    const def = CARD_DEF[data.id];
+    // 用定义 id（cardDefId）从卡牌库重建完整卡牌，保留 range 等字段
+    const def = CARD_DEF[data.cardDefId];
     if (def) {
       const card = { ...def };
+      card.id = data.id != null ? data.id : card.id;
+      card.cardDefId = data.cardDefId;
       card.suit = data.suit || card.suit;
-      card.number = data.number || card.number;
+      card.number = data.number != null ? data.number : card.number;
+      card.ownerId = data.ownerId;
       return card;
     }
     // 降级：直接用数据构建
     return {
-      id: data.id || 'unknown',
+      id: data.id != null ? data.id : 'unknown',
+      cardDefId: data.cardDefId,
       name: data.name || '未知',
       type: data.type || 'unknown',
       category: data.category || 'unknown',
       suit: data.suit || 'none',
-      number: data.number || 0,
+      number: data.number != null ? data.number : 0,
+      ownerId: data.ownerId,
     };
   }
 
@@ -388,84 +393,16 @@ class Game {
   // ========== PvP 远程动作处理 ==========
   
   _pvpRemotePlayCard(payload) {
-    const { playerId, cardIdx, targetPlayerIdx, equipSlot: eSlot } = payload;
+    const { playerId, cardIdx, targetPlayerIdx, effectiveType } = payload;
     const player = this.players[playerId];
     if (!player || !player.alive) return;
-    
+
     const card = player.hand[cardIdx];
     if (!card) return;
-    
-    // 根据卡牌类型，我们需要触发本地播放逻辑
-    // 由于 guest 端也需要模拟主机端的动作，这里调用对应的 resolve 方法
-    if (card.type === 'basic') {
-      if (card.id === 'sha') {
-        // 杀 - 需要找到目标
-        if (targetPlayerIdx !== undefined && this.players[targetPlayerIdx]) {
-          this._pvpPlayShaRemote(player, card, cardIdx, this.players[targetPlayerIdx]);
-        }
-      } else if (card.id === 'tao') {
-        player.hand.splice(cardIdx, 1);
-        this.heal(player, 1);
-        this.render();
-      } else if (card.id === 'jiu') {
-        this.resolveJiu(player, cardIdx);
-      }
-    } else if (card.type === 'trick') {
-      if (targetPlayerIdx !== undefined) {
-        this._pvpPlayTrickRemote(player, card, cardIdx, this.players[targetPlayerIdx], eSlot);
-      }
-    } else if (card.type === 'equip') {
-      this._pvpEquipRemote(player, card, cardIdx);
-    }
-  }
-  
-  _pvpPlayShaRemote(player, card, cardIdx, target) {
-    player.hand.splice(cardIdx, 1);
-    this.discardPile.push(card);
-    
-    if (this.gameMode === 1) {
-      target = this.players.find(p => p.id !== player.id && p.alive);
-      if (!target) return;
-    }
-    
-    // 检查目标是否有闪
-    const shanCard = target.hand.find(c => c.id === 'shan');
-    if (!shanCard) {
-      this.dealDamage(target, 1);
-      this.render();
-    }
-    // 如果有闪，AI玩家自动使用，人类玩家等待
-  }
-  
-  _pvpPlayTrickRemote(player, card, cardIdx, target, equipSlot) {
-    player.hand.splice(cardIdx, 1);
-    if (card.id === 'guohe') {
-      if (equipSlot) {
-        // 弃置装备
-        target.equipment[equipSlot] = null;
-        this.discardPile.push(card);
-      } else {
-        this.discardPile.push(card);
-      }
-    } else if (card.id === 'shunshou') {
-      if (equipSlot) {
-        player.equipment[equipSlot] = target.equipment[equipSlot];
-        target.equipment[equipSlot] = null;
-      }
-    }
-    this.render();
-  }
-  
-  _pvpEquipRemote(player, card, cardIdx) {
-    player.hand.splice(cardIdx, 1);
-    const slot = card.equipSlot;
-    if (slot && player.equipment[slot] !== undefined) {
-      if (player.equipment[slot]) {
-        this.discardPile.push(player.equipment[slot]);
-      }
-      player.equipment[slot] = card;
-    }
-    this.render();
+
+    const target = (targetPlayerIdx != null && targetPlayerIdx >= 0) ? this.players[targetPlayerIdx] : null;
+    // 统一走本地结算入口，确保与主机端行为一致（玩家为 AI，不会再次广播）
+    this.useCardOnTarget(card, target, effectiveType);
   }
   
   _pvpRemoteRespond(payload) {
@@ -825,7 +762,7 @@ class Game {
     for (const jc of judgeCards) {
       const judgeCard = this.drawOne();
       if (!judgeCard) continue;
-      this.addLog(`${player.hero.name}的【${jc.name}】判定：${judgeCard.suit} ${judgeCard.rank || ''}【${judgeCard.name}】`);
+      this.addLog(`${player.hero.name}的【${jc.name}】判定：${judgeCard.suit}${judgeCard.number}【${judgeCard.name}】`);
       if (jc.type === 'lebu') {
         this.discardPile.push(judgeCard);
         if (judgeCard.suit !== '♥') {
@@ -839,7 +776,7 @@ class Game {
           this.addLog(`兵粮寸断生效，${player.hero.name}跳过摸牌阶段`, 'skill');
         } else { this.addLog('兵粮寸断失效'); }
       } else if (jc.type === 'shandian') {
-        if (judgeCard.suit === '♠' && ['2','3','4','5','6','7','8','9'].includes(judgeCard.rank)) {
+        if (judgeCard.suit === '♠' && judgeCard.number >= 2 && judgeCard.number <= 9) {
           this.addLog(`闪电命中！${player.hero.name}受到3点雷电伤害！`, 'damage');
           this.dealDamage(player, null, 3, judgeCard);
           this.discardPile.push(judgeCard);
@@ -1096,17 +1033,18 @@ class Game {
   useCardOnTarget(card, target, effectiveTypeOverride) {
     const player = this.players[this.currentPlayerIdx];
     const effectiveType = effectiveTypeOverride || card.type;
+    const cardIdx = player.hand.indexOf(card);
     this.discardCard(player, card);
-    
+
     // PvP 广播
     if (this._isPvP && player.isHuman) {
       pvpBroadcast(this, 'playCard', {
         playerId: player.id,
-        cardIdx: player.hand.findIndex(c => c.id === card.id), // 可能已经出牌了，找原始的
+        cardIdx: cardIdx,
         cardId: card.id,
         cardType: card.type,
-        targetPlayerId: target ? target.id : -1,
         effectiveType: effectiveType,
+        targetPlayerIdx: target ? target.id : -1,
       });
     }
     const isWushengSha = (player.hero.id === 'guanyu' && card.type !== 'sha' && effectiveType === 'sha');
@@ -2160,7 +2098,8 @@ class Game {
     const count = player.hand.length;
     const cards = [...player.hand];
     for (const c of cards) {
-      this.discardCard(player, c);
+      const idx = player.hand.indexOf(c);
+      if (idx >= 0) player.hand.splice(idx, 1);
       c.ownerId = target.id;
       target.hand.push(c);
     }

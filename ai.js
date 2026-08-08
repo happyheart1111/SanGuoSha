@@ -83,7 +83,8 @@ Game.prototype.aiUseSkills = function(player) {
       const count = player.hand.length;
       const cards = [...player.hand];
       for (const c of cards) {
-        this.discardCard(player, c);
+        const idx = player.hand.indexOf(c);
+        if (idx >= 0) player.hand.splice(idx, 1);
         c.ownerId = ally.id;
         ally.hand.push(c);
       }

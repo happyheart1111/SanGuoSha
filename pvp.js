@@ -335,10 +335,10 @@ function serializeGameState(game) {
       isHuman: p.isHuman,
       isAI: p.isAI,
       role: p.role || null,
-      hand: p.isHuman ? null : p.hand.map(c => ({ id: c.id, name: c.name, suit: c.suit, number: c.number, type: c.type, category: c.category })),
+      hand: p.isHuman ? null : p.hand.map(c => ({ id: c.id, cardDefId: c.cardDefId, name: c.name, suit: c.suit, number: c.number, type: c.type, category: c.category })),
       handCount: p.hand.length,
       equipment: { ...p.equipment },
-      judgeArea: p.judgeArea.map(c => ({ id: c.id, name: c.name, suit: c.suit, number: c.number, type: c.type, category: c.category })),
+      judgeArea: p.judgeArea.map(c => ({ id: c.id, cardDefId: c.cardDefId, name: c.name, suit: c.suit, number: c.number, type: c.type, category: c.category })),
       linked: p.linked,
       seat: p.seat,
       deckPosition: p.deckPosition,
@@ -369,7 +369,7 @@ function serializeOpponentView(game, opponentPlayerIdx) {
   if (ownPlayer) {
     const pState = state.players.find(p => p.id === opponentPlayerIdx);
     if (pState) {
-      pState.hand = ownPlayer.hand.map(c => ({ id: c.id, name: c.name, suit: c.suit, number: c.number, type: c.type, category: c.category }));
+      pState.hand = ownPlayer.hand.map(c => ({ id: c.id, cardDefId: c.cardDefId, name: c.name, suit: c.suit, number: c.number, type: c.type, category: c.category }));
     }
   }
   return state;
