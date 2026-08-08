@@ -29,7 +29,7 @@ const DDZ_BID_MULTIPLIER = { 0: 1, 1: 1, 2: 2, 3: 3 };
 // ==================== 入口：选将后进入叫分 ====================
 
 function startDouDizhuBidding(pickedHeroIds) {
-  const game = new Game();
+  game = new Game();
   window.game = game;
   game.isDouDizhu = true;
   game.ddzHeroIds = [...pickedHeroIds];
