@@ -292,6 +292,10 @@ Game.prototype.triggerNongminBonus = function (mate, deadMate) {
     this.addLog(`${mate.hero.name}发动【同心】，摸2张牌`, 'skill');
   }
   this.render();
+  this.checkGameOver();
+  // 同心结算后恢复出牌回合：阵亡发生在攻击方（地主）的回合内，
+  // currentPlayerIdx 仍是该攻击方，需续上其出牌，否则回合永久挂起。
+  if (!this.gameOver) this._resumeGameAfterDying(this.players[this.currentPlayerIdx]);
 };
 
 Game.prototype.humanNongminBonus = function (choice) {
