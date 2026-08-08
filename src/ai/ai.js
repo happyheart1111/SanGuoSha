@@ -17,39 +17,59 @@ function getAISpeed() { return AI_SPEED; }
 
 // AI 摸牌阶段
 Game.prototype.aiDrawPhase = function(player, skipPlay) {
+  const goToNext = () => {
+    this.phase = 'play';
+    this.render();
+    if (!skipPlay) {
+      setTimeout(() => this.aiPlayPhase(player), _aid(800));
+    } else {
+      setTimeout(() => this.goToDiscardPhase(player), _aid(600));
+    }
+  };
+
+  const drawSeq = (count, onDone) => {
+    const drawNext = (i) => {
+      if (i >= count) { onDone(); return; }
+      this.drawCard(player, 1);
+      this.render();
+      setTimeout(() => drawNext(i + 1), 250);
+    };
+    drawNext(0);
+  };
+
   // 神·鲁肃缔盟
   if (player.hero.id === 'shen-lusu') {
-    this.drawCard(player, 4);
     this.addLog(`${player.hero.name}发动【缔盟】，摸了4张牌`, 'skill');
+    drawSeq(4, goToNext);
+    return;
   }
   // 张辽突袭 AI
-  else if (player.hero.id === 'zhangliao' && !this.tuxiUsedThisTurn) {
+  if (player.hero.id === 'zhangliao' && !this.tuxiUsedThisTurn) {
     this.tuxiUsedThisTurn = true;
     const others = this.players.filter(p => p.alive && p.id !== player.id && p.hand.length > 0);
     const targets = others.sort(() => Math.random() - 0.5).slice(0, 2);
-    for (const t of targets) {
-      const card = t.hand[Math.floor(Math.random() * t.hand.length)];
-      this.transferCard(t, player, card);
-      this.addLog(`${player.hero.name}发动【突袭】，获得了${t.hero.name}的一张【${card.name}】`, 'skill');
-    }
-    if (targets.length === 0) {
-      this.drawCard(player, 2);
+    if (targets.length > 0) {
+      for (const t of targets) {
+        const card = t.hand[Math.floor(Math.random() * t.hand.length)];
+        this.transferCard(t, player, card);
+        this.addLog(`${player.hero.name}发动【突袭】，获得了${t.hero.name}的一张【${card.name}】`, 'skill');
+      }
+      goToNext();
+    } else {
       this.addLog(`${player.hero.name} 无目标可突袭，摸了2张牌`);
+      drawSeq(2, goToNext);
     }
-  } else if (player.hero.id === 'shen-lvmeng') {
-    // 神吕蒙涉猎
+    return;
+  }
+  // 神吕蒙涉猎
+  if (player.hero.id === 'shen-lvmeng') {
     this.resolveShelie(player);
-  } else {
-    this.drawCard(player, 2);
-    this.addLog(`${player.hero.name} 摸了2张牌`);
+    goToNext();
+    return;
   }
-  this.phase = 'play';
-  this.render();
-  if (!skipPlay) {
-    setTimeout(() => this.aiPlayPhase(player), _aid(800));
-  } else {
-    setTimeout(() => this.goToDiscardPhase(player), _aid(600));
-  }
+  // 默认摸2张
+  this.addLog(`${player.hero.name} 摸了2张牌`);
+  drawSeq(2, goToNext);
 };
 
 // AI 出牌阶段入口
@@ -72,9 +92,17 @@ Game.prototype.aiUseSkills = function(player) {
     const count = player.hand.length;
     const cards = [...player.hand];
     for (const c of cards) this.discardCard(player, c);
-    this.drawCard(player, count);
     this.zhihengUsedThisTurn = true;
     this.addLog(`${player.hero.name}发动【制衡】，弃置${count}张牌并摸了${count}张牌`, 'skill');
+    let drawn = 0;
+    const drawOne = () => {
+      if (drawn >= count) return;
+      this.drawCard(player, 1);
+      drawn++;
+      this.render();
+      if (drawn < count) setTimeout(drawOne, 200);
+    };
+    drawOne();
   }
 
   // 刘备仁德
@@ -98,12 +126,17 @@ Game.prototype.aiUseSkills = function(player) {
   // 黄盖苦肉
   if (player.hero.id === 'huanggai' && player.hp > 2 && player.hand.length <= 3) {
     const times = Math.min(2, player.hp - 1);
-    for (let i = 0; i < times; i++) {
-      if (player.hp <= 1) break;
+    const doNextKurou = (i) => {
+      if (i >= times || player.hp <= 1) return;
       player.hp--;
       this.drawCard(player, 2);
       this.addLog(`${player.hero.name}发动【苦肉】，失去1点体力并摸2张牌`, 'skill');
-    }
+      this.render();
+      if (i + 1 < times && player.hp > 1) {
+        setTimeout(() => doNextKurou(i + 1), 400);
+      }
+    };
+    doNextKurou(0);
   }
 
   // 孙尚香结姻
@@ -193,9 +226,14 @@ Game.prototype.aiPlayCards = function(player) {
   if (wuzhongIdx >= 0) {
     const card = player.hand[wuzhongIdx];
     this.discardCard(player, card);
-    this.resolveWuzhong(player);
+    this.addLog(`${player.hero.name}使用了无中生有，摸2张牌`);
+    this.drawCard(player, 1);
     this.render();
-    setTimeout(() => this.aiPlayCards(player), 500);
+    setTimeout(() => {
+      this.drawCard(player, 1);
+      this.render();
+      setTimeout(() => this.aiPlayCards(player), _aid(300));
+    }, 250);
     return;
   }
 
