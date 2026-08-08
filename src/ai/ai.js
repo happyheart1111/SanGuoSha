@@ -92,17 +92,9 @@ Game.prototype.aiUseSkills = function(player) {
     const count = player.hand.length;
     const cards = [...player.hand];
     for (const c of cards) this.discardCard(player, c);
+    this.drawCard(player, count);
     this.zhihengUsedThisTurn = true;
     this.addLog(`${player.hero.name}发动【制衡】，弃置${count}张牌并摸了${count}张牌`, 'skill');
-    let drawn = 0;
-    const drawOne = () => {
-      if (drawn >= count) return;
-      this.drawCard(player, 1);
-      drawn++;
-      this.render();
-      if (drawn < count) setTimeout(drawOne, 200);
-    };
-    drawOne();
   }
 
   // 刘备仁德
@@ -126,17 +118,12 @@ Game.prototype.aiUseSkills = function(player) {
   // 黄盖苦肉
   if (player.hero.id === 'huanggai' && player.hp > 2 && player.hand.length <= 3) {
     const times = Math.min(2, player.hp - 1);
-    const doNextKurou = (i) => {
-      if (i >= times || player.hp <= 1) return;
+    for (let i = 0; i < times; i++) {
+      if (player.hp <= 1) break;
       player.hp--;
       this.drawCard(player, 2);
       this.addLog(`${player.hero.name}发动【苦肉】，失去1点体力并摸2张牌`, 'skill');
-      this.render();
-      if (i + 1 < times && player.hp > 1) {
-        setTimeout(() => doNextKurou(i + 1), 400);
-      }
-    };
-    doNextKurou(0);
+    }
   }
 
   // 孙尚香结姻
