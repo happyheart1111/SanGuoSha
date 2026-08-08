@@ -150,6 +150,7 @@
 
   Game.prototype.startCurrentTurn = function() {
     if (this.gameOver) return;
+    this.turnNumber++;
     const player = this.players[this.currentPlayerIdx];
     if (!player.alive) { this.nextPlayer(); return; }
     this.shaUsedThisTurn = false;

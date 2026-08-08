@@ -1004,4 +1004,175 @@ function confirmHeroPick(heroId) {
   game.render();
 }
 
+function showReplay() {
+  const data = window._replayData;
+  if (!data || !data.logs || data.logs.length === 0) return;
+
+  // 停止之前的自动播放
+  if (window._replayTimer) { clearInterval(window._replayTimer); window._replayTimer = null; }
+  window._replayStep = data.logs.length - 1; // 默认到最后一步
+  window._replayAuto = false;
+
+  const app = document.getElementById('app');
+  const renderReplayUI = () => {
+    const step = window._replayStep;
+    const maxStep = data.logs.length - 1;
+
+    let playersHtml = '';
+    for (const p of data.playerInfo) {
+      const roleData = ROLES[p.role] || ROLES.free || { name: '自由', icon: '🆓', color: '#aaa' };
+      const status = p.alive ? '<span style="color:#4caf50;">存活</span>' : '<span style="color:#f44336;">阵亡</span>';
+      playersHtml += `<div class="replay-player-card ${!p.alive ? 'dead' : ''}">
+        <div class="replay-player-name" style="color:${roleData.color};">${p.name}</div>
+        <div class="replay-player-info">${roleData.icon} ${roleData.name} · ${status}</div>
+        <div class="replay-player-info">${p.faction} · 体力${p.maxHp}</div>
+        ${p.isHuman ? '<div class="replay-player-you">你</div>' : ''}
+      </div>`;
+    }
+
+    let logHtml = '';
+    for (let i = 0; i <= step; i++) {
+      const entry = data.logs[i];
+      if (!entry) continue;
+      if (entry.msg.startsWith('====================================')) {
+        logHtml += `<div class="replay-log-entry replay-log-entry-separator ${i === step ? 'current' : ''}">——————</div>`;
+      } else {
+        const typeClass = entry.type || '';
+        logHtml += `<div class="replay-log-entry ${typeClass} ${i === step ? 'current' : ''}" data-step="${i}">${entry.msg}</div>`;
+      }
+    }
+
+    if (step < maxStep) {
+      logHtml += `<div class="replay-log-entry replay-log-entry-pending">··· 后续步骤 ···</div>`;
+    }
+
+    const progress = maxStep > 0 ? Math.round((step / maxStep) * 100) : 100;
+
+    app.innerHTML = `<div class="replay-overlay">
+      <div class="replay-container">
+        <div class="replay-header">
+          <h2>📋 对局复盘</h2>
+          <div class="replay-summary">
+            <span>${data.modeName}</span>
+            <span class="replay-dot">·</span>
+            <span>共 ${data.turnCount} 回合</span>
+            <span class="replay-dot">·</span>
+            <span style="color:#f0d060;">${data.resultMsg}</span>
+          </div>
+        </div>
+        <div class="replay-body">
+          <div class="replay-sidebar">
+            <h3>参战玩家</h3>
+            ${playersHtml}
+          </div>
+          <div class="replay-main">
+            <div class="replay-log-header">
+              <span>📜 战斗日志</span>
+              <span class="replay-step-indicator">${step + 1} / ${data.logs.length}</span>
+            </div>
+            <div class="replay-log-list" id="replayLogList">
+              ${logHtml}
+            </div>
+          </div>
+        </div>
+        <div class="replay-footer">
+          <div class="replay-controls">
+            <button class="replay-btn" onclick="replayStepTo(0)" ${step <= 0 ? 'disabled' : ''}>⏮ 开头</button>
+            <button class="replay-btn" onclick="replayStepPrev()" ${step <= 0 ? 'disabled' : ''}>◀ 上一步</button>
+            <button class="replay-btn replay-btn-play" onclick="replayToggleAuto()">${window._replayAuto ? '⏸ 暂停' : '▶ 自动播放'}</button>
+            <button class="replay-btn" onclick="replayStepNext()" ${step >= maxStep ? 'disabled' : ''}>下一步 ▶</button>
+            <button class="replay-btn" onclick="replayStepTo(${maxStep})" ${step >= maxStep ? 'disabled' : ''}>结尾 ⏭</button>
+          </div>
+          <div class="replay-speed" style="${window._replayAuto ? '' : 'opacity:0.4;'}">
+            速度：<input type="range" min="1" max="10" value="${window._replaySpeed || 4}" oninput="replaySetSpeed(this.value)">
+            <span>${window._replaySpeed || 4}/10</span>
+          </div>
+          <button class="replay-btn replay-btn-close" onclick="replayClose()">✕ 关闭复盘</button>
+        </div>
+      </div>
+    </div>`;
+
+    // 滚动到当前步骤
+    setTimeout(() => {
+      const logList = document.getElementById('replayLogList');
+      if (logList) {
+        const curEntry = logList.querySelector('.replay-log-entry.current');
+        if (curEntry) curEntry.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        else logList.scrollTop = logList.scrollHeight;
+      }
+    }, 50);
+  };
+
+  renderReplayUI();
+}
+
+// 复盘控制函数
+function replayStepTo(n) {
+  const data = window._replayData;
+  if (!data) return;
+  window._replayStep = Math.max(0, Math.min(n, data.logs.length - 1));
+  showReplay();
+}
+
+function replayStepNext() {
+  const data = window._replayData;
+  if (!data) return;
+  if (window._replayStep < data.logs.length - 1) {
+    window._replayStep++;
+    showReplay();
+  }
+}
+
+function replayStepPrev() {
+  if (window._replayStep > 0) {
+    window._replayStep--;
+    showReplay();
+  }
+}
+
+function replayToggleAuto() {
+  window._replayAuto = !window._replayAuto;
+  if (window._replayAuto) {
+    window._replaySpeed = window._replaySpeed || 4;
+    replayAutoAdvance();
+  } else {
+    if (window._replayTimer) { clearInterval(window._replayTimer); window._replayTimer = null; }
+    showReplay();
+  }
+}
+
+function replayAutoAdvance() {
+  if (window._replayTimer) clearInterval(window._replayTimer);
+  const data = window._replayData;
+  if (!data) { window._replayAuto = false; return; }
+  window._replayTimer = setInterval(() => {
+    if (!window._replayAuto || window._replayStep >= data.logs.length - 1) {
+      clearInterval(window._replayTimer);
+      window._replayTimer = null;
+      window._replayAuto = false;
+      showReplay();
+      return;
+    }
+    window._replayStep++;
+    showReplay();
+  }, 1100 - (window._replaySpeed || 4) * 100);
+}
+
+function replaySetSpeed(v) {
+  window._replaySpeed = parseInt(v);
+  if (window._replayAuto) {
+    replayAutoAdvance();
+  }
+  showReplay();
+}
+
+function replayClose() {
+  if (window._replayTimer) { clearInterval(window._replayTimer); window._replayTimer = null; }
+  window._replayAuto = false;
+  // 重新渲染游戏结束画面
+  if (window.game && window.game.gameOver) {
+    window.game.render();
+  }
+}
+
 showHeroSelect();

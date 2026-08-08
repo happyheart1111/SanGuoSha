@@ -9,6 +9,7 @@ class Game {
     this.discardPile = [];
     this.currentPlayerIdx = 0;
     this.phase = 'idle';
+    this.turnNumber = 0;
     this.logEntries = [];
     this.shaUsedThisTurn = false;
     this.zhihengUsedThisTurn = false;

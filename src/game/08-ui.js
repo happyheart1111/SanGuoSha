@@ -522,7 +522,8 @@
         }
         html += '</div>';
       }
-      html += `${!this._isPvP ? `<button class="btn" onclick="game.restart()" style="margin:5px;">再来一局（同一武将）</button>` : ''}
+      html += `<button class="btn btn-replay" onclick="showReplay()" style="margin:5px;">📋 复盘本局</button>
+        ${!this._isPvP ? `<button class="btn" onclick="game.restart()" style="margin:5px;">再来一局（同一武将）</button>` : ''}
           <button class="btn" onclick="showHeroSelect()" style="margin:5px;">${this._isPvP ? '返回大厅' : '选择新武将'}</button>
         </div>
       </div>`;

@@ -193,6 +193,8 @@
 
     if (result) {
       this.gameOver = true;
+      // 捕获复盘数据
+      this._captureReplayData(result);
       this.phase = 'idle';
       this.winningTeam = result.team + '';
       this.addLog('====================================', 'important');
@@ -217,5 +219,29 @@
       this.render();
       this._pvpSyncState();
     }
+  }
+
+  Game.prototype._captureReplayData = function(result) {
+    const modeNames = { 1: '1v1 混战', 5: '五人身份局', 8: '八人身份局' };
+    const modeName = this.isDouDizhu ? '三人斗地主' : (modeNames[this.gameMode] || (this.gameMode + '人局'));
+    const playerInfo = this.players.map(p => ({
+      name: p.hero.name,
+      heroId: p.hero.id,
+      faction: p.hero.faction,
+      role: p.role || 'free',
+      alive: p.alive,
+      maxHp: p.hero.maxHp,
+      isHuman: p.isHuman
+    }));
+    window._replayData = {
+      modeName: modeName,
+      modeKey: this.gameMode,
+      isDdz: this.isDouDizhu,
+      turnCount: this.turnNumber,
+      resultMsg: result.msg,
+      winningTeam: result.team,
+      playerInfo: playerInfo,
+      logs: [...this.logEntries],
+    };
   }
 
