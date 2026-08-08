@@ -22,9 +22,14 @@
     this.checkGameOver();
   }
 
+  const KILL_LINES = ['一破！卧龙出山！', '双连！一战成名！', '三连！举世皆惊！', '四破！天下无双！'];
+
   Game.prototype.killPlayer = function(player, source) {
     player.alive = false;
-    this.addLog(`${player.hero.name}阵亡！`, 'important');
+    this.killCount = (this.killCount || 0) + 1;
+    const line = this.killCount <= KILL_LINES.length ? KILL_LINES[this.killCount - 1] : `第${this.killCount}杀！`;
+    const killerName = source ? source.hero.name : '天';
+    this.addLog(`${line}  ${killerName} 斩杀了 ${player.hero.name}`, 'death');
     if (player.role && !this.rolesRevealed[player.id]) {
       this.rolesRevealed[player.id] = true;
       this.addLog(`${player.hero.name}的身份是：${getRoleDisplayName(player.role)}`, 'important');

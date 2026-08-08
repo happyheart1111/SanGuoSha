@@ -5,8 +5,8 @@
 
 // AI 速度倍率：0~1，越小越快。1=原速，0.45=默认提速（适合网页版）
 let AI_SPEED = 0.45;
-// 最小延迟，防止瞬间闪过
-const AI_MIN_DELAY = 60;
+// 最小延迟，AI出牌停顿0.3秒
+const AI_MIN_DELAY = 300;
 
 // 获取实际延迟
 function _aid(ms) { return Math.max(AI_MIN_DELAY, Math.round(ms * AI_SPEED)); }

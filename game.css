@@ -404,6 +404,7 @@ body::before {
 .log-entry { padding: 2px 0; border-bottom: 1px solid rgba(74,48,16,0.25); }
 .log-entry:last-child { border-bottom: none; }
 .log-entry.important { color: #f0d060; }
+.log-entry.death { color: #ff4444; font-weight: bold; text-shadow: 0 0 8px rgba(255,68,68,0.5); font-size: 12px; }
 .log-entry.damage { color: #ff6060; }
 .log-entry.heal { color: #60ff60; }
 .log-entry.skill { color: #ffe080; }
@@ -770,6 +771,8 @@ body::before {
 }
 .replay-log-entry.important { color: #f0d060; }
 .replay-log-entry.important.current { color: #fff; background: rgba(240,208,96,0.15); }
+.replay-log-entry.death { color: #ff4444; font-weight: bold; }
+.replay-log-entry.death.current { color: #ff6666; background: rgba(255,68,68,0.15); border-left-color: #ff4444; }
 .replay-log-entry.damage { color: #ff6b6b; }
 .replay-log-entry.damage.current { color: #ff4444; background: rgba(255,68,68,0.1); border-left-color: #ff6b6b; }
 .replay-log-entry.skill { color: #70c0ff; }
