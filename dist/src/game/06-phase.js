@@ -124,7 +124,7 @@
 
   Game.prototype.humanConfirmDiscard = function() {
     if (!this.waitingForTarget || this.waitingForTarget.type !== 'discard_phase') return;
-    const { player, selected, needDiscard } = this.waitingForTarget;
+    const { player, selected, needDiscard, qinyinPlayer } = this.waitingForTarget;
     if (selected.length !== needDiscard) {
       this.addLog(`请弃置正好 ${needDiscard} 张牌`);
       return;
@@ -133,7 +133,7 @@
     const cards = selected.sort((a,b) => b-a).map(i => player.hand[i]);
     for (const c of cards) this.discardCard(player, c);
     this.addLog(`${player.hero.name}弃置了${cards.length}张牌`);
-    if (wt.qinyinPlayer) this.triggerQinyin(wt.qinyinPlayer);
+    if (qinyinPlayer) this.triggerQinyin(qinyinPlayer);
     this.nextPlayer();
   }
 
@@ -177,10 +177,16 @@
       const aliveNeijian = alive.filter(p => p.role === 'neijian');
       const aliveZhongchen = alive.filter(p => p.role === 'zhongchen');
 
-      if (zhugong && !zhugong.alive) {
-        result = { team: 'fanzei', winners: alive.filter(p => p.role === 'fanzei'), msg: '主公已阵亡，反贼获胜！' };
-      } else if (aliveFanzei.length === 0 && aliveNeijian.length === 0) {
+      // 反贼与内奸全灭 → 主公忠臣胜（此分支先判断，确保主公死后由反贼所杀时不被误判）
+      if (aliveFanzei.length === 0 && aliveNeijian.length === 0) {
         result = { team: 'zhugong', winners: alive.filter(p => p.role === 'zhugong' || p.role === 'zhongchen'), msg: '反贼与内奸已全部消灭，主公忠臣获胜！' };
+      } else if (zhugong && !zhugong.alive) {
+        // 主公阵亡：若还有存活反贼 → 反贼胜；若反贼已灭（内奸单挑击杀主公）→ 内奸胜
+        if (aliveFanzei.length > 0) {
+          result = { team: 'fanzei', winners: aliveFanzei, msg: '主公已阵亡，反贼获胜！' };
+        } else {
+          result = { team: 'neijian', winners: alive.filter(p => p.role === 'neijian'), msg: '反贼已灭，内奸击杀主公获胜！' };
+        }
       } else if (alive.length === 1 && alive[0].role === 'neijian') {
         result = { team: 'neijian', winners: [alive[0]], msg: '内奸成为最后的幸存者，内奸获胜！' };
       }

@@ -169,7 +169,7 @@ Game.prototype.aiUseSkills = function(player) {
       for (const c of cards) this.discardPile.push(c);
       this.yeyanUsedThisTurn = true;
       this.addLog(`${player.hero.name}发动【业炎】，对${enemy.hero.name}造成2点火焰伤害！`, 'skill');
-      this.dealDamage(enemy, player, 2, { name: '业炎' });
+      this.dealDamage(enemy, player, 2, { name: '业炎' }, 'fire');
     }
   }
   // 神吕蒙攻心

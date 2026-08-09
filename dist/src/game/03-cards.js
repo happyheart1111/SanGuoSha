@@ -178,7 +178,7 @@
     const discard = matchCards[Math.floor(Math.random() * matchCards.length)];
     this.discardCard(source, discard);
     this.addLog(`${source.hero.name}弃置【${discard.name}】对${target.hero.name}造成1点火焰伤害`, 'damage');
-    this.dealDamage(target, source, 1);
+    this.dealDamage(target, source, 1, null, 'fire');
     this.render();
   }
 
@@ -190,7 +190,7 @@
     this.waitingForTarget = null;
     this.discardCard(source, card);
     this.addLog(`${source.hero.name}弃置【${card.name}】对${target.hero.name}造成1点火焰伤害`, 'damage');
-    this.dealDamage(target, source, 1);
+    this.dealDamage(target, source, 1, null, 'fire');
     if (!this.waitingForTarget) this._resumeSourcePlay(source);
     this.render();
   }

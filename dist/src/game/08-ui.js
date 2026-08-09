@@ -39,7 +39,7 @@
     this.aiRespondJuedou(defender, challenger, lübuInvolved);
   }
 
-  Game.prototype.dealDamage = function(target, source, amount, card = null) {
+  Game.prototype.dealDamage = function(target, source, amount, card = null, damageType = null) {
     // 酒效果：对该杀的伤害+1
     if (card && card.type === 'sha' && this.pendingDamageCards[target.id] && this.pendingDamageCards[target.id].jiuBoost) {
       amount += this.pendingDamageCards[target.id].jiuBoost;
@@ -119,6 +119,18 @@
         target.equipment.plusHorse = null;
         this.addLog(`【麒麟弓】弃置了${target.hero.name}的+1马【${horse.name}】`, 'skill');
       }
+    }
+    // 铁索连环：属性伤害（火/雷）传导给其他横置角色
+    if (damageType && target.alive && target.linked && !this._chainGuard && amount > 0) {
+      this._chainGuard = true;
+      const typeName = damageType === 'fire' ? '火焰' : '雷电';
+      const chained = this.players.filter(p => p.alive && p.linked && p.id !== target.id);
+      for (const cp of chained) {
+        this.addLog(`【铁索连环】传导！${cp.hero.name}受到${amount}点${typeName}伤害`, 'skill');
+        if (typeof VFX !== 'undefined') VFX.spawnFloatText(VFX.getTargetCenter(cp).x, VFX.getTargetCenter(cp).y - 40, damageType === 'fire' ? '🔥' : '⚡', 'skill');
+        this.dealDamage(cp, source, amount, card, damageType);
+      }
+      this._chainGuard = false;
     }
     this.checkGameOver();
     this._pvpSyncState();

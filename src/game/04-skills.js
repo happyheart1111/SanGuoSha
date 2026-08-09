@@ -123,14 +123,8 @@
     if (typeof VFX !== 'undefined') VFX.skillActivate(target);
     if (judgeCard.suit === '♠' && source.alive) {
       this.addLog(`判定结果为♠，${source.hero.name}受到1点雷电伤害！`, 'damage');
-      source.hp--;
-      this.addLog(`${source.hero.name}受到1点雷电伤害 (剩余HP: ${source.hp}/${source.hero.maxHp})`, 'damage');
-      // VFX 雷电伤害特效
-      if (typeof VFX !== 'undefined') {
-        VFX.damageEffect(source, 1);
-        VFX.spawnFloatText(VFX.getTargetCenter(source).x, VFX.getTargetCenter(source).y - 40, '⚡', 'skill');
-      }
-      if (source.hp <= 0) this.handleDying(source);
+      // 雷击走完整伤害结算（触发卖血技与铁索连环传导），击杀者记为张角
+      this.dealDamage(source, target, 1, null, 'thunder');
       this.checkGameOver();
     } else {
       this.addLog(`判定结果不是♠，雷击未触发`, 'skill');
@@ -341,7 +335,7 @@
   Game.prototype.doYeyanDamage = function(player, target) {
     this.yeyanUsedThisTurn = true;
     this.addLog(`${player.hero.name}发动【业炎】，对${target.hero.name}造成2点火焰伤害！`, 'skill');
-    this.dealDamage(target, player, 2, { name: '业炎' });
+    this.dealDamage(target, player, 2, { name: '业炎' }, 'fire');
     this.render();
   }
 

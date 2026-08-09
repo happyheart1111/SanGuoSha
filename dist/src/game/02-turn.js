@@ -317,7 +317,7 @@
       } else if (jc.type === 'shandian') {
         if (finalCard.suit === '♠' && finalCard.number >= 2 && finalCard.number <= 9) {
           this.addLog(`闪电命中！${player.hero.name}受到3点雷电伤害！`, 'damage');
-          this.dealDamage(player, null, 3, finalCard);
+          this.dealDamage(player, null, 3, finalCard, 'thunder');
           this.discardPile.push(finalCard);
         } else {
           this.addLog('闪电未命中，移至下家判定区');
