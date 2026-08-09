@@ -547,7 +547,10 @@
         if (handChoices.length + equipChoices.length + judgeChoices.length === 0) {
           html += '<span style="color:#ff6060;">目标没有任何牌可选</span>';
         }
-        html += '<button class="btn" onclick="game.cancelWait()">取消</button>';
+        // 破军取消 = 放弃发动技能，杀继续结算；其余 = 取消该次操作
+        html += wt.type === 'poujun_discard'
+          ? '<button class="btn" onclick="game.cancelPoujun()">放弃破军</button>'
+          : '<button class="btn" onclick="game.cancelWait()">取消</button>';
       }
       if (wt.type === 'discard_phase') {
         html += `<span style="color:#ff6060;margin-right:10px;">已选 ${wt.selected.length}/${wt.needDiscard} 张</span>`;

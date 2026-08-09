@@ -390,6 +390,16 @@
   }
 
   // ===== 界徐盛【破军】：弃置目标一张牌，若目标因此无手牌则此杀伤害+1 =====
+  // 放弃发动破军：杀继续正常结算（不发动技能）
+  Game.prototype.cancelPoujun = function() {
+    const wt = this.waitingForTarget;
+    if (!wt || wt.type !== 'poujun_discard') return;
+    this.waitingForTarget = null;
+    this.addLog(`${wt.source.hero.name}放弃发动【破军】`, 'skill');
+    this._beginShaResponse(wt.source, wt.target, wt.card, 0);
+    this.render();
+  }
+
   Game.prototype.humanPoujunDiscard = function(pickObj) {
     if (!this.waitingForTarget || this.waitingForTarget.type !== 'poujun_discard') return;
     const { target, source, card } = this.waitingForTarget;
