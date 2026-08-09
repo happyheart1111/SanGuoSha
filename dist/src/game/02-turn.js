@@ -530,34 +530,51 @@
     this.addLog(`${player.hero.name}装备了【${card.name}】${typeNames[card.type]}`, 'equip');
   }
 
+  // 选择目标：改为在场上玩家面板上直接点选（可选目标金色高亮，不可选目标置灰）
   Game.prototype.showTargetSelection = function(card, targets, callback) {
-    this.waitingForTarget = { card, targets, callback };
+    this.waitingForTarget = { type: 'target_select', card, targets, callback };
     this.render();
     const overlay = document.getElementById('targetOverlay');
-    const hint = document.getElementById('targetHint');
-    const buttons = document.getElementById('targetButtons');
-    hint.textContent = `使用【${card.name}】—— 选择目标`;
-    buttons.innerHTML = targets.map(t => `
-      <button class="target-btn" onclick="window._targetSelect('${t.id}')">
-        ${t.hero.name} (${t.hp}/${t.hero.maxHp} HP)
-      </button>
-    `).join('') + `
-      <button class="target-btn" style="border-color:#666;color:#888;" onclick="window._cancelTarget()">取消</button>
-    `;
-    overlay.classList.add('show');
-    window._targetSelect = (id) => {
-      overlay.classList.remove('show');
-      const target = targets.find(t => t.id === id);
-      if (target && this.waitingForTarget) this.waitingForTarget.callback(target);
-      this.waitingForTarget = null;
-      this.render();
-    };
-    window._cancelTarget = () => {
-      overlay.classList.remove('show');
+    if (overlay) overlay.classList.remove('show');
+  }
+
+  // 点击场上玩家面板选择目标
+  Game.prototype.pickTarget = function(pid) {
+    if (!this.waitingForTarget || this.waitingForTarget.type !== 'target_select') return;
+    const { targets, callback } = this.waitingForTarget;
+    const target = targets.find(t => t.id === pid);
+    if (!target || !target.alive) return;
+    this.waitingForTarget = null;
+    this.selectedCardIdx = -1;
+    if (callback) callback(target);
+    this.render();
+  }
+
+  // 取消目标选择（不消耗手牌）
+  Game.prototype.cancelTargetSelect = function() {
+    if (this.waitingForTarget && this.waitingForTarget.type === 'target_select') {
       this.waitingForTarget = null;
       this.selectedCardIdx = -1;
       this.render();
-    };
+    }
+  }
+
+  // 兼容旧的弹窗按钮（保留全局函数）
+  window._targetSelect = (id) => {
+    const g = window.game;
+    if (g) g.pickTarget(parseInt(id));
+  };
+  window._cancelTarget = () => {
+    const g = window.game;
+    if (g) g.cancelTargetSelect();
+  };
+
+  // 判断目标选择状态下某个玩家的显示状态：'selectable' | 'blocked' | null
+  Game.prototype.getTargetSelectState = function(player) {
+    const wt = this.waitingForTarget;
+    if (!wt || wt.type !== 'target_select' || !player) return null;
+    if (wt.targets.some(t => t.id === player.id)) return 'selectable';
+    return 'blocked';
   }
 
   Game.prototype.useCardOnTarget = function(card, target, effectiveTypeOverride) {

@@ -368,6 +368,11 @@
     if (this.waitingForTarget && !this.autoPlay) {
       const wt = this.waitingForTarget;
       html += '<div class="action-bar">';
+      if (wt.type === 'target_select') {
+        const targetCount = wt.targets.length;
+        html += `<span style="color:#f0d060;margin-right:10px;">使用【${wt.card.name}】—— 点击场上<b style="color:#ffe080;">金色高亮</b>的玩家选择目标（<b style="color:#888;">灰色</b>玩家不可选，共${targetCount}个可选目标）</span>`;
+        html += '<button class="btn" onclick="game.cancelTargetSelect()">取消出牌</button>';
+      }
       if (wt.type === 'shan_response' && (wt.hasShan || wt.hasBaguazhen)) {
         html += `<span style="color:#ff6060;margin-right:10px;">需要打出【闪】响应${wt.source.hero.name}的【杀】</span>`;
         if (wt.hasBaguazhen) html += '<button class="btn skill-btn" onclick="game.humanUseBaguazhen()">👘八卦阵判定</button>';
@@ -665,7 +670,23 @@
     if (!player.alive) classes += ' dead';
     if (isHuman) classes += ' human-panel';
 
-    let html = `<div class="${classes}">`;
+    // 目标选择状态：可选目标金色高亮可点击，不可选目标置灰
+    const selState = this.getTargetSelectState(player);
+    let panelClick = '';
+    let handCountClick = `game.showSkillDetail('${player.hero.id}')`;
+    let handCountTitle = '点击查看武将技能详情';
+    if (selState === 'selectable') {
+      classes += ' target-selectable';
+      panelClick = ` onclick="game.pickTarget(${player.id})"`;
+      handCountClick = 'event.stopPropagation();';
+      handCountTitle = '点击该角色，对其使用此牌';
+    } else if (selState === 'blocked') {
+      classes += ' target-blocked';
+      handCountClick = 'event.stopPropagation();';
+      handCountTitle = '该角色不能作为此牌的目标';
+    }
+
+    let html = `<div class="${classes}"${panelClick}>`;
     // 座位号徽章
     if (seat !== undefined && seat !== null) {
       const seatLabel = seat + 1;
@@ -698,8 +719,8 @@
     }
     html += '</div>';
 
-    html += `<div class="hand-count" style="cursor:pointer;" onclick="game.showSkillDetail('${player.hero.id}')"
-      title="点击查看武将技能详情">手牌: ${player.hand.length}张 👁️技能</div>`;
+    html += `<div class="hand-count" style="cursor:pointer;" onclick="${handCountClick}"
+      title="${handCountTitle}">手牌: ${player.hand.length}张 👁️技能</div>`;
 
     html += '<div class="equipment-area">';
     const equipSlots = [

@@ -72,6 +72,11 @@
 
   Game.prototype.humanEndPlayPhase = function() {
     if (this.phase !== 'play') return;
+    // 清除残留的目标选择状态
+    if (this.waitingForTarget && this.waitingForTarget.type === 'target_select') {
+      this.waitingForTarget = null;
+      this.selectedCardIdx = -1;
+    }
     this.phase = 'discard';
     const player = this.players[this.currentPlayerIdx];
     
@@ -146,6 +151,10 @@
     }
     this.phase = 'idle';
     this.selectedCardIdx = -1;
+    // 回合切换时清除残留的目标选择状态
+    if (this.waitingForTarget && this.waitingForTarget.type === 'target_select') {
+      this.waitingForTarget = null;
+    }
     this.shaUsedThisTurn = false;
     this.shaUsedCount = 0;
     this.zhihengUsedThisTurn = false;

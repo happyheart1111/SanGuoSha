@@ -4,6 +4,7 @@
 
 ## 引擎关键约定（改代码前必读）
 - **回合驱动靠 setTimeout 链**：startCurrentTurn → resolveJudgePhase → goToDrawPhase → goToPlayPhase → aiPlayPhase → aiPlayCards → endPlayPhase → nextPlayer。任何"响应类"动作（出闪/南蛮万箭响应/决斗/八卦阵判定/同心/濒死救桃）完成后，必须调用 `_resumeSourcePlay(source)` 或 `_resumeGameAfterDying(current)` 恢复出牌方回合，否则回合永久挂起（stall）。
+- **出牌目标选择 = 场上点选**：`showTargetSelection(card, targets, callback)` 设置 `waitingForTarget = { type:'target_select', card, targets, callback }`，玩家直接点击场上玩家面板（`pickTarget(pid)`），可选目标金色高亮 `target-selectable`，不可选目标置灰 `target-blocked`（getTargetSelectState 判定）。取消用 `cancelTargetSelect()`；humanEndPlayPhase/nextPlayer 会自动清理残留。不要改回 targetOverlay 弹窗（旧弹窗已废弃但 DOM 保留）。
 - **顶层 `let game` 与 `window.game`**：game.js 顶层 `let game` 是脚本级词法绑定（浏览器里跨 `<script>` 不可见），ddz.js 等用 `const game = new Game(); window.game = game;` 经 window 桥接。测试若把所有文件拼进同一 vm 脚本，裸 `game` 解析到的是那份恒为 undefined 的词法绑定，必须经由 `window.game` 访问。
 - **团队感知**：斗地主用 `getEnemies/getAllies/ddzTargetFilter` 区分敌我；任何伤害/治疗/给牌的目标选择都要过这三个过滤器，否则农民会误伤/误奶队友。
 
