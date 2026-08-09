@@ -9,9 +9,20 @@
 
 ## 已知引擎缺陷模式（已修复，记录防回归）
 - AOE 最后一个目标是 AI 时 `processAOETargets` 不续链 → 改 idx>=length 调 `_resumeSourcePlay`。
-- `aiRespondJuedou` 漏 `_resumeSourcePlay(challenger)`（人类路径有）。
+- **决斗恢复目标必须是 `players[currentPlayerIdx]`（当前出牌方），不是 challenger**：aiRespondJuedou / humanRespondJuedou / humanRespondJuedouSecond / resolveAutoPlayPending(juedou) 共 4 处。否则 AI 发起决斗→玩家反击→AI 无杀 时 AI 回合挂起（challenger=玩家→人类分支空操作）。
 - `pendingDamageCards[target.id]` 可能在重排的响应计时器触发前被清空 → `pd` undefined 时访问 `pd.shanNeeded` 崩溃（aiRespondToSha / humanUseBaguazhen / humanRespondShan 三处已加 `if(pd)` 守卫）。
 - 死亡结算（killPlayer→triggerNongminBonus）后需续链，否则出牌方回合挂起。
+- 过河拆桥/顺手牵羊**盲选 UI 必须提供装备+判定区按钮**（仅手牌按钮在目标无手牌时会卡死）；取消按钮一律用 `cancelWait()`（会恢复 source 出牌），不要直接 `waitingForTarget=null`。
+- 托管（resolveAutoPlayPending）必须为每个新增的 waitingForTarget 类型补分支，否则托管时卡死。
+
+## 武将技能框架约定（新技能接入点）
+- resolveSha 已拆为三段链：resolveSha(谋烈弓/破军) → _beginShaResponse(黄忠烈弓/马超铁骑) → _beginShaResponseCore(闪响应)；直接伤害用 `_dealShaDamage`（会设 pendingDamageCards 保证奸雄可取牌）。
+- 判定替换钩子：`maybeGuicai(judgePlayer, judgeCard, callback)` — 已挂延时锦囊(_processJudgeCards)/铁骑/刚烈。
+- 卖血技触发点统一在 dealDamage(08-ui)：夏侯惇刚烈(带 _ganglianGuard 防递归)、司马懿反馈(带 _fankuiGuard)、张角雷击、郭嘉天妒、曹操奸雄。
+- 观星触发点在 startCurrentTurn（判定前），人类用 waitingForTarget 'guanxing'，AI 随机放一半到底部。
+- 空城过滤：getValidTargets 的 sha/juedou + AI 目标过滤（ai.js 出杀/决斗两处）。
+- 新增武将（09-08 新增）：zhugeliang/zhaoyun/huangzhong/machao/xiahoudun/caoren/simayi/jiexusheng(吴)/mouhuangzhong；谋黄忠花色记录在 useCardOnTarget（使用牌+成为目标时），存 player.mouLieGongSuits。
+- 赵云龙胆接入点：playSelectedCard(闪当杀) / waitForShanResponse+humanRespondShan(杀当闪) / humanRespondJuedou+humanRespondAOE(闪当杀) / aiRespondToSha+aiRespondToAOE+aiRespondJuedou / handleCardClick+clickable 高亮。
 
 ## ddz 玩法（欢乐斗地主）
 - 1 地主 vs 2 农民，叫分定地主；地主 +1 体力上限 +【飞扬】【跋扈】，农民队友阵亡【同心】。差异层在 ddz.js，复用全部卡牌结算。
